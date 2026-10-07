@@ -1,0 +1,16 @@
+{
+  "name": "protecao-veicular-rn",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Site de vendas de proteção veicular 21Go em Natal e RN (consultor independente).",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env servidor/servidor.js",
+    "start": "node servidor/servidor.js",
+    "teste": "node --test teste/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

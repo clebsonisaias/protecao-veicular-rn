@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /leads
+Sitemap: https://protecaoveicularrn.170.82.252.195.sslip.io/sitemap.xml
