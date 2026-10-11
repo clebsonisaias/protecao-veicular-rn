@@ -119,3 +119,73 @@ test("leads do site antigo viram cotações; sem senha o painel não existe", as
   after(() => srv.close());
   assert.equal((await fetch(`http://127.0.0.1:${srv.address().port}/painel`, { redirect: "manual" })).status, 404);
 });
+
+test("com CRM_FORM_URL: listas vêm do PowerCRM e o pedido é reenviado pra lá", async () => {
+  const chamadas = [];
+  let crmFora = false;
+  const resposta = (dado, status = 200) => ({ ok: status < 400, status, json: async () => dado });
+  const buscar = async (url, opcoes = {}) => {
+    chamadas.push({ url, corpo: opcoes.body && JSON.parse(opcoes.body) });
+    if (url.includes("/cb/?type=1")) return resposta([{ id: 38, text: "Hyundai", lixo: null }]);
+    if (url.includes("/bmy/?cb=38")) return resposta([{ id: 32000, text: "Zero KM" }, { id: 2019, text: "2019" }]);
+    if (url.includes("/cmby/?cb=38&cy=2019")) return resposta([{ id: 9400, text: "HB20 1.0" }]);
+    if (url.includes("/city/ct?st=20")) return resposta([{ id: 3770, text: "Natal" }]);
+    if (url.includes("/frmByCd?code=FORM123")) return resposta({ companyHash: "hash1", pipelineColumnId: 1, leadSourceId: 1584, leadSubSourceId: null, funnelStageId: null });
+    if (url.endsWith("/svQttnDynmcFrm")) return crmFora ? resposta({ success: false, message: "fora do ar" }) : resposta({ success: true, qttnCd: "QT1", isPlan: 1, planPriority: 1 });
+    return resposta({}, 404);
+  };
+  const { app, arquivo } = criarApp({ env: { DADOS_DIR: pasta(), PAINEL_SENHA: "s3nha", CRM_FORM_URL: "https://cotacao.me/FORM123?id=CONS9" }, log: mudo, buscar });
+  const srv = app.listen(0);
+  after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const post = (b) => fetch(`${base}/api/leads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+  const salvas = () => JSON.parse(readFileSync(arquivo, "utf8"));
+  const esperarCrm = async (i) => { for (let n = 0; n < 100 && !salvas()[i]?.crm; n++) await new Promise((r) => setTimeout(r, 10)); return salvas()[i]; };
+
+  assert.deepEqual(await (await fetch(`${base}/api/veiculos?tipo=carro`)).json(), [{ id: 38, text: "Hyundai" }]);
+  assert.deepEqual(await (await fetch(`${base}/api/veiculos?marca=38`)).json(), [{ id: 2019, text: "2019" }], "Zero KM sai da lista de anos");
+  assert.deepEqual(await (await fetch(`${base}/api/veiculos?marca=38&ano=2019`)).json(), [{ id: 9400, text: "HB20 1.0" }]);
+  assert.equal((await fetch(`${base}/api/veiculos?marca=../x`)).status, 400);
+
+  assert.equal((await post({ ...OK, marcaId: "38", modeloId: "9400", leilao: "sim" })).status, 200);
+  const enviada = await esperarCrm(0);
+  assert.equal(enviada.crm.ok, true);
+  assert.equal(enviada.crm.link, "https://app.powercrm.com.br/compareTables?h=QT1");
+  const { corpo } = chamadas.find((c) => c.url.endsWith("/svQttnDynmcFrm"));
+  assert.deepEqual(
+    { ...corpo, utmParameters: undefined },
+    { companyHash: "hash1", formCode: "FORM123", leadSource: "1584", pipelineColumn: "1", companyUserCode: "CONS9", clientName: "Ana Souza",
+      clientPhone: "(84) 99999-1234", clientCity: "3770", vehiclePlate: "ABC1D23", vehicleType: "1", vehicleBranch: "38", vehicleModel: "9400",
+      vehicleYear: "2019", vehicleIsWork: true, observation: "Leilão ou remarcado", utmParameters: undefined },
+  );
+
+  // texto livre (listas não carregaram) e CRM fora do ar: o pedido fica salvo e o painel mostra o motivo
+  assert.equal((await post(OK)).status, 200);
+  assert.match((await esperarCrm(1)).crm.erro, /texto livre/);
+  crmFora = true;
+  assert.equal((await post({ ...OK, marcaId: "38", modeloId: "9400" })).status, 200);
+  assert.equal((await esperarCrm(2)).crm.erro, "fora do ar");
+
+  // reenviar pelo painel quando o CRM volta; a já enviada não duplica
+  const entrou = await fetch(`${base}/painel/entrar`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "senha=s3nha" });
+  const cookie = entrou.headers.get("set-cookie").split(";")[0];
+  const reenviar = (id) => fetch(`${base}/painel/${id}/crm`, { method: "POST", redirect: "manual", headers: { cookie } });
+  crmFora = false;
+  const antes = chamadas.filter((c) => c.url.endsWith("/svQttnDynmcFrm")).length;
+  await reenviar(salvas()[2].id);
+  await reenviar(salvas()[0].id);
+  assert.equal(salvas()[2].crm.ok, true);
+  assert.equal(chamadas.filter((c) => c.url.endsWith("/svQttnDynmcFrm")).length, antes + 1);
+  assert.match(await (await fetch(`${base}/painel?id=${salvas()[1].id}`, { headers: { cookie } })).text(), /Não entrou no PowerCRM/);
+});
+
+test("sem CRM_FORM_URL as listas não existem e nada sai do servidor", async () => {
+  const buscar = async () => { throw new Error("não devia chamar"); };
+  const { app, arquivo } = criarApp({ env: { DADOS_DIR: pasta() }, log: mudo, buscar });
+  const srv = app.listen(0);
+  after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  assert.equal((await fetch(`${base}/api/veiculos?tipo=carro`)).status, 404);
+  assert.equal((await fetch(`${base}/api/leads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(OK) })).status, 200);
+  assert.equal(JSON.parse(readFileSync(arquivo, "utf8"))[0].crm, undefined);
+});

@@ -45,6 +45,40 @@
     if (form.zeroKm.checked) { placa.value = ""; mostrarErros({}); }
   });
 
+  // --- marca, ano e modelo: listas do catálogo da 21Go; se não carregarem, fica o texto livre ---
+  const valor = (el) => (el.tagName === "SELECT" ? (el.value ? el.selectedOptions[0].text : "") : el.value.trim());
+  const listar = async (q) => {
+    const r = await fetch("/api/veiculos?" + new URLSearchParams(q));
+    if (!r.ok) throw new Error("lista indisponível");
+    return r.json();
+  };
+  const encher = (sel, itens, vazio) => {
+    sel.replaceChildren(new Option(vazio, ""), ...itens.map((o) => new Option(o.text, o.id)));
+    sel.disabled = !itens.length;
+  };
+  const virarSelect = (nome) => {
+    const antigo = form.elements[nome], sel = document.createElement("select");
+    sel.id = antigo.id; sel.name = nome; sel.required = true;
+    antigo.replaceWith(sel);
+    return sel;
+  };
+  const tipoAtual = () => form.querySelector("[name=tipo]:checked").value;
+  listar({ tipo: tipoAtual() }).then((marcas) => {
+    const marca = virarSelect("marca"), ano = virarSelect("ano"), modelo = virarSelect("modelo");
+    const limpar = (deMarca) => {
+      if (deMarca) encher(ano, [], "Escolha a marca primeiro");
+      encher(modelo, [], "Escolha o ano primeiro");
+    };
+    const carregar = async (sel, q, vazio, falha) => {
+      encher(sel, [], "Carregando...");
+      try { encher(sel, await listar(q), vazio); } catch { encher(sel, [], falha); mostrarErros({ [sel.name]: "A lista não carregou. Escolha de novo o campo anterior." }); }
+    };
+    encher(marca, marcas, "Escolha a marca"); limpar(true);
+    $$("[name=tipo]", form).forEach((r) => r.addEventListener("change", () => { limpar(true); carregar(marca, { tipo: tipoAtual() }, "Escolha a marca", "Lista indisponível"); }));
+    marca.addEventListener("change", () => { limpar(true); if (marca.value) carregar(ano, { marca: marca.value }, "Escolha o ano", "Lista indisponível"); });
+    ano.addEventListener("change", () => { limpar(false); if (ano.value) carregar(modelo, { marca: marca.value, ano: ano.value }, "Escolha o modelo", "Lista indisponível"); });
+  }).catch(() => {});
+
   // --- 3 etapas + sucesso ---
   const ETAPAS = 3;
   const etapas = $$(".etapa", form), rotulo = $("[data-etapa-atual]", form), barra = $(".progresso span", form);
@@ -69,8 +103,8 @@
     1: () => (form.zeroKm.checked || /^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(placa.value) ? {} : { placa: "Placa no formato ABC1D23 ou ABC1234." }),
     2: () => {
       const erros = {};
-      if (form.marca.value.trim().length < 2) erros.marca = "Diga a marca do veículo.";
-      if (form.modelo.value.trim().length < 2) erros.modelo = "Diga o modelo do veículo.";
+      if (valor(form.marca).length < 2) erros.marca = "Diga a marca do veículo.";
+      if (valor(form.modelo).length < 2) erros.modelo = "Diga o modelo do veículo.";
       const ano = Number(form.ano.value);
       if (!/^\d{4}$/.test(form.ano.value) || ano < 1980 || ano > anoAtual + 1) erros.ano = "Ano inválido.";
       return erros;
@@ -112,6 +146,10 @@
     if (Object.keys(erros).length) return;
     const btn = $('button[type="submit"]', form); btn.setAttribute("aria-busy", "true");
     const dados = Object.fromEntries(new FormData(form).entries());
+    if (form.marca.tagName === "SELECT") {
+      // o servidor guarda o nome para a planilha e o código para o CRM
+      Object.assign(dados, { marcaId: form.marca.value, modeloId: form.modelo.value, marca: valor(form.marca), modelo: valor(form.modelo) });
+    }
     try {
       const r = await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dados) });
       const j = await r.json().catch(() => ({}));

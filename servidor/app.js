@@ -34,6 +34,9 @@ export function validarLead(b = {}) {
   const cidade = s(b.cidade, 40);
   const tipo = s(b.tipo, 12);
   const plano = s(b.plano, 20);
+  // ids do catálogo do PowerCRM, quando o formulário conseguiu carregar as listas
+  const id = (v) => (/^\d{1,7}$/.test(String(v ?? "")) ? String(v) : "");
+  const marcaId = id(b.marcaId), modeloId = id(b.modeloId);
   const erros = {};
   if (nome.length < 2 || !/\s/.test(nome)) erros.nome = "Digite seu nome e sobrenome.";
   if (whatsapp.length < 10 || whatsapp.length > 13) erros.whatsapp = "WhatsApp com DDD, só números.";
@@ -50,6 +53,7 @@ export function validarLead(b = {}) {
   return {
     lead: {
       nome, whatsapp, email, placa, zeroKm, tipo, marca, modelo, ano, cidade,
+      ...(marcaId && modeloId && { marcaId, modeloId }),
       plano: plano || null,
       app: b.app === "sim",
       leilao: b.leilao === "sim",
@@ -100,6 +104,80 @@ function limitador(max) {
   };
 }
 
+const CRM = "https://app.powercrm.com.br";
+const TIPO_CRM = { carro: "1", utilitario: "1", moto: "2" };
+const ESTADO_RN = 20;
+
+/**
+ * PowerCRM pelo formulário público do consultor (o mesmo de cotacao.me): não
+ * exige token, que só o administrador da 21Go consegue gerar. `formUrl` é o
+ * link do consultor, ex.: https://cotacao.me/P4lp6EOp?id=vrXbXyyq
+ */
+function clienteCrm(formUrl, buscar) {
+  const u = URL.parse(formUrl || "");
+  const formCode = u?.pathname.split("/").filter(Boolean).pop();
+  const consultor = u?.searchParams.get("id");
+  if (!formCode || !consultor) return null;
+
+  // ponytail: cache em memória por 24h; marcas, modelos e cidades quase não mudam.
+  const cache = new Map();
+  async function json(url) {
+    const tem = cache.get(url);
+    if (tem && Date.now() - tem.em < 86_400_000) return tem.dado;
+    const r = await buscar(url, { headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error(`PowerCRM respondeu ${r.status}`);
+    const dado = await r.json();
+    if (cache.size > 2000) cache.clear();
+    cache.set(url, { em: Date.now(), dado });
+    return dado;
+  }
+  const enxuto = (lista) => lista.map((x) => ({ id: x.id, text: x.text }));
+
+  return {
+    formUrl,
+    async marcas(tipo) { return enxuto(await json(`${CRM}/cb/?type=${tipo}`)); },
+    // 32000 é o "Zero KM" deles; aqui o 0 km já é a caixinha do passo da placa
+    async anos(marca) { return enxuto(await json(`${CRM}/bmy/?cb=${marca}`)).filter((a) => a.id < 3000); },
+    async modelos(marca, ano) { return enxuto(await json(`${CRM}/cmby/?cb=${marca}&cy=${ano}`)); },
+
+    async enviar(c) {
+      if (!c.marcaId || !c.modeloId) throw new Error("marca e modelo vieram em texto livre, sem o código do CRM");
+      const cidades = await json(`https://utilities.powercrm.com.br/city/ct?st=${ESTADO_RN}`);
+      const cidade = cidades.find((x) => x.text === c.cidade);
+      if (!cidade) throw new Error(`cidade "${c.cidade}" não tem código no CRM`);
+      const form = await json(`${CRM}/frmByCd?code=${formCode}`);
+      const d = c.whatsapp.replace(/^55(?=\d{10,11}$)/, "");
+      const extras = [c.zeroKm && "Veículo 0 km", c.leilao && "Leilão ou remarcado", c.temSeguro && "Tem seguro hoje", c.plano && `Interesse no plano ${c.plano}`].filter(Boolean).join(" · ");
+      // mesmos nomes e formatos que o script.pwrcrm.js monta no navegador
+      const corpo = {
+        companyHash: form.companyHash, formCode,
+        leadSource: String(form.leadSubSourceId || form.leadSourceId || ""),
+        pipelineColumn: String(form.pipelineColumnId || ""),
+        ...(form.funnelStageId && { funnelStage: String(form.funnelStageId) }),
+        companyUserCode: consultor,
+        clientName: c.nome,
+        ...(c.email && { clientEmail: c.email }),
+        clientPhone: d.length === 11 ? `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}` : `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`,
+        clientCity: String(cidade.id),
+        vehiclePlate: c.placa || "",
+        vehicleType: TIPO_CRM[c.tipo],
+        vehicleBranch: c.marcaId, vehicleModel: c.modeloId, vehicleYear: c.ano,
+        vehicleIsWork: Boolean(c.app),
+        ...(extras && { observation: extras }),
+        utmParameters: { utm_source: "protecaoveicularrn" },
+      };
+      const r = await buscar(`${CRM}/svQttnDynmcFrm`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpo), signal: AbortSignal.timeout(12000) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(String(j.message || `PowerCRM respondeu ${r.status}`).slice(0, 200));
+      // mesmo destino para onde o formulário deles mandaria o cliente
+      const h = j.qttnCd;
+      const link = j.redirecTo || (!h ? "" : j.isPlan == 1 ? `${CRM}/${j.specificTable || j.planPriority == 2 ? "newQuotation" : "compareTables"}?h=${h}`
+        : j.isPlan > 0 ? `${CRM}/receivedQuotation?h=${h}` : "");
+      return { codigo: h ? String(h) : "", link };
+    },
+  };
+}
+
 const igual = (a, b) => {
   const x = Buffer.from(String(a ?? "")), y = Buffer.from(String(b ?? ""));
   return x.length === y.length && timingSafeEqual(x, y);
@@ -108,7 +186,7 @@ const lerCookie = (req, nome) =>
   (req.headers.cookie || "").split(/;\s*/).find((c) => c.startsWith(nome + "="))?.slice(nome.length + 1) || "";
 const paraWa = (tel) => (tel.length <= 11 ? "55" + tel : tel);
 
-export function criarApp({ env = process.env, log = console } = {}) {
+export function criarApp({ env = process.env, log = console, buscar = fetch } = {}) {
   const dirDados = env.DADOS_DIR || join(RAIZ, "dados");
   mkdirSync(dirDados, { recursive: true });
   const banco = abrirCotacoes(dirDados);
@@ -118,6 +196,19 @@ export function criarApp({ env = process.env, log = console } = {}) {
     whatsapp: (env.WHATSAPP || "").replace(/\D/g, ""),
     simuladorUrl: env.SIMULADOR_URL || "",
   };
+
+  const crm = clienteCrm(env.CRM_FORM_URL, buscar);
+  // Nunca derruba o pedido: o resultado fica na cotação e aparece no painel.
+  async function mandarAoCrm(c) {
+    if (!crm) return;
+    try {
+      c.crm = { ok: true, em: new Date().toISOString(), ...(await crm.enviar(c)) };
+    } catch (e) {
+      c.crm = { ok: false, em: new Date().toISOString(), erro: e.message };
+      log.warn(`[crm] ${c.nome}: ${e.message}`);
+    }
+    banco.salvar();
+  }
 
   // Painel: sem env nova em produção, a senha é o LEADS_TOKEN que já existe.
   const senha = env.PAINEL_SENHA || env.LEADS_TOKEN || "";
@@ -143,6 +234,20 @@ export function criarApp({ env = process.env, log = console } = {}) {
     res.send(`window.CFG=${JSON.stringify(cfg)};`);
   });
 
+  app.get("/api/veiculos", async (req, res) => {
+    if (!crm) return res.status(404).end(); // sem CRM o formulário fica em texto livre
+    const n = (v) => (/^\d{1,7}$/.test(String(v ?? "")) ? String(v) : "");
+    const marca = n(req.query.marca), ano = n(req.query.ano), tipo = TIPO_CRM[req.query.tipo];
+    try {
+      const lista = marca && ano ? await crm.modelos(marca, ano) : marca ? await crm.anos(marca) : tipo ? await crm.marcas(tipo) : null;
+      if (!lista) return res.status(400).json({ erro: "Informe tipo, ou marca, ou marca e ano." });
+      res.setHeader("Cache-Control", "public, max-age=3600").json(lista);
+    } catch (e) {
+      log.warn(`[crm] listas: ${e.message}`);
+      res.status(502).json({ erro: "Lista indisponível." });
+    }
+  });
+
   const permitido = limitador(10);
   app.post("/api/leads", express.json({ limit: "16kb" }), (req, res) => {
     const ip = req.ip;
@@ -155,6 +260,7 @@ export function criarApp({ env = process.env, log = console } = {}) {
     banco.salvar();
     log.info(`[cotacao] ${lead.nome} · ${lead.marca} ${lead.modelo} ${lead.ano} · ${lead.cidade}`);
     avisarTelegram(env, cotacao, `${req.protocol}://${req.get("host")}`).catch((e) => log.warn(`[telegram] ${e.message}`));
+    mandarAoCrm(cotacao);
     res.json({ ok: true });
   });
 
@@ -194,11 +300,18 @@ export function criarApp({ env = process.env, log = console } = {}) {
     const filtro = Object.hasOwn(STATUS, req.query.status) ? req.query.status : "";
     res.type("html").send(paginaPainel({
       cotacoes: [...banco.lista].reverse(), filtro, aberta: achar(String(req.query.id || "")), salvo: req.query.salvo === "1",
+      crmUrl: crm?.formUrl || "",
     }));
   });
   painel.get("/planilha.csv", (_req, res) => {
     res.type("text/csv").setHeader("Content-Disposition", 'attachment; filename="cotacoes-21go.csv"');
     res.send(csvCotacoes([...banco.lista].reverse()));
+  });
+  painel.post("/:id/crm", async (req, res) => {
+    const c = achar(req.params.id);
+    if (!c) return res.status(404).end();
+    if (!c.crm?.ok) await mandarAoCrm(c); // já enviada não duplica no CRM
+    res.redirect(`/painel?id=${c.id}`);
   });
   painel.post("/:id", (req, res) => {
     const c = achar(req.params.id);

@@ -13,6 +13,7 @@ npm run teste      # node --test
 ## Como a cotação anda
 
 1. Cliente preenche em 3 passos (placa, veículo, contato) → `POST /api/leads` grava com status **Nova** e avisa no Telegram.
+   Com `CRM_FORM_URL`, o pedido também é enviado ao PowerCRM pelo mesmo endereço que o formulário do cotacao.me usa (`app.powercrm.com.br/svQttnDynmcFrm`, sem token). Se o CRM recusar ou estiver fora do ar, o pedido continua salvo e o painel mostra o motivo, com botão para reenviar. "Outra cidade" e pedidos em texto livre não têm código no CRM e ficam para preenchimento à mão.
 2. `/painel` (senha): planilha com as colunas na ordem do simulador oficial. Clicar numa célula copia o valor. "Baixar planilha" gera CSV para Excel/Sheets.
 3. "Abrir" numa linha: digite o valor de cada plano e a taxa de ativação, salve, e clique em **Enviar cotação no WhatsApp**. Isso marca como **Cotação enviada** e abre a conversa do cliente com a mensagem e o link prontos.
 4. O cliente abre `/c/<id>` (link privado, fora do Google), vê os planos com os valores e clica em "Quero o plano X", que cai no seu WhatsApp. O painel mostra "cliente abriu".
@@ -24,6 +25,7 @@ npm run teste      # node --test
 |---|---|---|
 | `WHATSAPP` | sim, pra converter | Seu número, só dígitos com 55+DDD (ex.: `5584999990000`). Sem ela os botões "Quero o plano" e "Chamar no WhatsApp" somem. |
 | `PAINEL_SENHA` | recomendada | Senha do `/painel`. Se não existir, vale o `LEADS_TOKEN` antigo. Sem nenhuma das duas o painel some (404). |
+| `CRM_FORM_URL` | recomendada | Seu link de cotação do PowerCRM (`https://cotacao.me/<formulário>?id=<seu código>`). Com ela, marca/ano/modelo viram listas do catálogo da 21Go e cada pedido entra sozinho no seu CRM. Sem ela o site funciona em texto livre e nada é enviado. |
 | `SIMULADOR_URL` | não | Link oficial do consultor na 21Go (`https://simule.21go.online/<seu-slug>`), guardado pra uso futuro. |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | não | Aviso instantâneo de pedido novo no Telegram, com link direto pro painel. |
 | `DADOS_DIR` | no Docker já vem | Pasta do `cotacoes.json`. **Tem de ser volume persistente** no Coolify. |

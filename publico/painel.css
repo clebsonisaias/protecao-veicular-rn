@@ -53,6 +53,10 @@ h1,h2,h3{font-family:var(--f-tit);letter-spacing:-.02em;margin:0}
 .cp.ok{background:var(--limao)}
 .st{font-weight:600}
 .st-nova{color:#b45309}.st-enviada{color:var(--azul)}.st-fechou{color:#15803d}.st-perdeu{color:var(--texto-2)}
+.crm-ok{color:#15803d;font-weight:600}.crm-falha{color:var(--erro);font-weight:600}
+.crm{margin:.9rem 0 0;padding:.6rem .75rem;border-radius:8px;background:var(--papel);font-size:.9rem;font-weight:500}
+.crm p{margin:0 0 .6rem}.crm form{display:inline}.crm .bt{margin:0 .4rem .2rem 0}
+.gaveta .crm form .bt{width:auto;margin-top:0}
 .dica,.vazio{color:var(--texto-2);margin:.75rem .25rem}
 .vazio{font-size:1.05rem;padding:2rem 0}
 .aviso-copia{position:fixed;left:50%;bottom:1.25rem;translate:-50% 0;max-width:calc(100% - 2rem);padding:.6rem 1rem;border-radius:10px;background:var(--marinho);color:#fff;opacity:0;pointer-events:none;transition:opacity .15s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

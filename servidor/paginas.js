@@ -54,7 +54,9 @@ export function paginaEntrar(erro = "") {
 </form></body></html>`;
 }
 
-export function paginaPainel({ cotacoes, filtro, aberta, salvo }) {
+const noCrm = (c) => (c.crm?.ok ? "Enviada" : c.crm ? "Falhou" : "");
+
+export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl }) {
   const conta = (s) => cotacoes.filter((c) => c.status === s).length;
   const visiveis = filtro ? cotacoes.filter((c) => c.status === filtro) : cotacoes;
   const q = (id) => `/painel?${new URLSearchParams({ ...(filtro && { status: filtro }), ...(id && { id }) })}`;
@@ -66,6 +68,7 @@ export function paginaPainel({ cotacoes, filtro, aberta, salvo }) {
     <td class="fixa"><a href="${q(c.id)}">Abrir</a></td>
     <td>${esc(quando(c.ts))}</td>
     <td class="st st-${esc(c.status)}">${esc(STATUS[c.status] || c.status)}${c.vistaEm ? " · cliente abriu" : ""}</td>
+    ${crmUrl ? `<td class="crm-${c.crm?.ok ? "ok" : "falha"}">${noCrm(c)}</td>` : ""}
     ${COLUNAS.map(([, v]) => { const t = esc(v(c) ?? ""); return `<td>${t ? `<button type="button" class="cp">${t}</button>` : ""}</td>`; }).join("")}
   </tr>`).join("");
 
@@ -80,13 +83,13 @@ export function paginaPainel({ cotacoes, filtro, aberta, salvo }) {
 <div class="area${aberta ? " com-gaveta" : ""}">
   <main class="planilha">
     ${visiveis.length ? `<table>
-      <thead><tr><th class="fixa"></th><th>Pedido em</th><th>Status</th>${COLUNAS.map(([n]) => `<th>${n}</th>`).join("")}</tr></thead>
+      <thead><tr><th class="fixa"></th><th>Pedido em</th><th>Status</th>${crmUrl ? "<th>PowerCRM</th>" : ""}${COLUNAS.map(([n]) => `<th>${n}</th>`).join("")}</tr></thead>
       <tbody>${linhas}</tbody>
     </table>
     <p class="dica">Clique em qualquer célula para copiar o valor e colar no sistema da 21Go.</p>`
     : `<p class="vazio">${filtro ? "Nenhuma cotação com esse status." : "Nenhum pedido ainda. Quando alguém pedir cotação no site, aparece aqui."}</p>`}
   </main>
-  ${aberta ? gaveta(aberta, q(""), salvo) : ""}
+  ${aberta ? gaveta(aberta, q(""), salvo, crmUrl) : ""}
 </div>
 <output class="aviso-copia" id="copiado" aria-live="polite"></output>
 <script>
@@ -111,7 +114,15 @@ export function paginaPainel({ cotacoes, filtro, aberta, salvo }) {
 </script></body></html>`;
 }
 
-function gaveta(c, voltar, salvo) {
+function blocoCrm(c, crmUrl) {
+  if (!crmUrl) return "";
+  if (c.crm?.ok) return `<p class="crm crm-ok">Enviada ao PowerCRM em ${esc(quando(c.crm.em))}.${c.crm.link ? ` <a href="${esc(c.crm.link)}" target="_blank" rel="noopener">Abrir a cotação gerada</a>` : ""}</p>`;
+  return `<div class="crm crm-falha"><p>${c.crm ? `Não entrou no PowerCRM: ${esc(c.crm.erro)}.` : "Este pedido ainda não foi enviado ao PowerCRM."}</p>
+    <form method="post" action="/painel/${esc(c.id)}/crm"><button class="bt">Enviar ao PowerCRM</button></form>
+    <a class="bt" href="${esc(crmUrl)}" target="_blank" rel="noopener">Preencher no CRM à mão</a></div>`;
+}
+
+function gaveta(c, voltar, salvo, crmUrl) {
   const v = c.valores || {};
   const veiculo = [c.marca, c.modelo, c.ano].filter(Boolean).join(" ");
   const tudo = COLUNAS.map(([n, f]) => `${n}: ${f(c) ?? ""}`).join("\n");
@@ -120,6 +131,7 @@ function gaveta(c, voltar, salvo) {
   <h2>${esc(c.nome)}</h2>
   <p class="sub">${esc(veiculo)} · ${esc(c.zeroKm ? "0 km" : c.placa || "sem placa")} · ${esc(c.cidade)}<br>${esc(tel(c.whatsapp))} · pedido em ${esc(quando(c.ts))}</p>
   <button type="button" class="bt" data-copiar="${esc(tudo)}">Copiar todos os dados</button>
+  ${blocoCrm(c, crmUrl)}
   ${salvo ? '<p class="ok-msg" role="status">Cotação salva.</p>' : ""}
   <form method="post" action="/painel/${esc(c.id)}">
     <h3>Valores que o sistema da 21Go deu</h3>
@@ -178,7 +190,7 @@ export function paginaCotacao(c, cfg) {
 /** CSV com ; e BOM: é o que o Excel em português abre direto. */
 export function csvCotacoes(cotacoes) {
   const colunas = [
-    ["Pedido em", (c) => quando(c.ts)], ["Status", (c) => STATUS[c.status] || c.status], ...COLUNAS,
+    ["Pedido em", (c) => quando(c.ts)], ["Status", (c) => STATUS[c.status] || c.status], ["PowerCRM", noCrm], ...COLUNAS,
     ...PLANOS.map((p) => [p.nome, (c) => numero(c.valores?.[p.chave])]),
     ["Taxa de ativação", (c) => numero(c.valores?.ativacao)], ["Observação", (c) => c.obs],
   ];

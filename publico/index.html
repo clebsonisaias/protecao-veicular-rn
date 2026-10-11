@@ -99,15 +99,15 @@
             <small class="erro" data-erro="marca"></small>
           </div>
           <div class="campo">
-            <label for="modelo">Modelo</label>
-            <input id="modelo" name="modelo" type="text" autocomplete="off" placeholder="Ex.: HB20, CG 160" required>
-            <small class="erro" data-erro="modelo"></small>
+            <label for="ano">Ano do modelo</label>
+            <input id="ano" name="ano" type="number" inputmode="numeric" min="1980" max="2027" placeholder="2019" required>
+            <small class="erro" data-erro="ano"></small>
           </div>
         </div>
-        <div class="campo campo-curto">
-          <label for="ano">Ano do modelo</label>
-          <input id="ano" name="ano" type="number" inputmode="numeric" min="1980" max="2027" placeholder="2019" required>
-          <small class="erro" data-erro="ano"></small>
+        <div class="campo">
+          <label for="modelo">Modelo</label>
+          <input id="modelo" name="modelo" type="text" autocomplete="off" placeholder="Ex.: HB20, CG 160" required>
+          <small class="erro" data-erro="modelo"></small>
         </div>
         <div class="campo">
           <span class="rotulo">Marque o que vale para o veículo</span>
@@ -165,7 +165,7 @@
           <button type="submit" class="btn btn-p btn-largo">Pedir cotação</button>
         </div>
         <small class="erro" data-erro="geral" role="alert"></small>
-        <p class="lgpd">Ao pedir, você concorda em ser contatado pelo WhatsApp sobre esta cotação. Seus dados não são usados para mais nada.</p>
+        <p class="lgpd">Ao pedir, você concorda em ser contatado pelo WhatsApp sobre esta cotação. Seus dados vão para o sistema de cotação da 21Go e não são usados para mais nada.</p>
       </fieldset>
 
       <div class="etapa sucesso" data-etapa="4" hidden>
