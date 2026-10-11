@@ -24,8 +24,8 @@ npm run teste      # node --test
 
 | Var | Obrigatória | Para quê |
 |---|---|---|
-| `WHATSAPP` | sim, pra converter | Seu número, só dígitos com 55+DDD (ex.: `5584999990000`). Sem ela os botões "Quero o plano" e "Chamar no WhatsApp" somem. |
-| `PAINEL_SENHA` | recomendada | Senha do `/painel`. Se não existir, vale o `LEADS_TOKEN` antigo. Sem nenhuma das duas o painel some (404). |
+| `WHATSAPP` | não | Pode ser definido em **Perfil** no painel, que tem prioridade. Seu número, só dígitos com 55+DDD (ex.: `5584999990000`). Sem ela os botões "Quero o plano" e "Chamar no WhatsApp" somem. |
+| `PAINEL_SENHA` | sim, na primeira vez | Senha inicial do `/painel` (ou o `LEADS_TOKEN` antigo). Depois que você troca a senha em **Perfil**, vale a nova e esta env é ignorada. Sem nenhuma senha o painel some (404). |
 | `CRM_FORM_URL` | recomendada | Seu link de cotação do PowerCRM (`https://cotacao.me/<formulário>?id=<seu código>`). Com ela, marca/ano/modelo viram listas do catálogo da 21Go e cada pedido entra sozinho no seu CRM. Sem ela o site funciona em texto livre e nada é enviado. |
 | `SIMULADOR_URL` | não | Link oficial do consultor na 21Go (`https://simule.21go.online/<seu-slug>`), guardado pra uso futuro. |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | não | Aviso instantâneo de pedido novo no Telegram, com link direto pro painel. |
@@ -44,6 +44,7 @@ npm run teste      # node --test
 
 - Arquivo: `DADOS_DIR/cotacoes.json` (lista com pedido, status, valores, data de envio e de abertura). Na primeira subida ele importa o `leads.jsonl` do site antigo, que fica como backup.
 - Documentos: `DADOS_DIR/docs/<id>/` (no mesmo volume). O tipo do arquivo é conferido pelo conteúdo, não pelo nome. Os textos e a lista de documentos ficam em `DOCS`, em `servidor/paginas.js`.
+- Perfil: `DADOS_DIR/painel.json` guarda nome, WhatsApp e o hash da senha trocada pelo painel (scrypt, nunca o texto). Esqueceu a senha? Apague esse arquivo no volume e reinicie: volta a valer a `PAINEL_SENHA`.
 - Anti-spam: honeypot (campo `site`) + limite de 10 pedidos por IP por hora. O login do painel tem o mesmo limite.
 
 ## Checklist de lançamento

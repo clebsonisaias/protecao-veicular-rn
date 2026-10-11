@@ -234,3 +234,36 @@ test("documentos: cliente envia pelo link, só o painel abre, e dá para apagar"
   assert.equal(salva().docs, undefined);
   assert.equal((await fetch(`${base}/painel/${id}/doc/cnh`, { headers: { cookie } })).status, 404);
 });
+
+test("perfil: troca de senha derruba a antiga e o cookie antigo; nome e WhatsApp passam a valer", async () => {
+  const dir = pasta();
+  const subir = () => { const { app } = criarApp({ env: { DADOS_DIR: dir, PAINEL_SENHA: "senha-da-env" }, log: mudo }); const srv = app.listen(0); after(() => srv.close()); return `http://127.0.0.1:${srv.address().port}`; };
+  const base = subir();
+  const form = (b, caminho, corpo, cookie = "") => fetch(b + caminho, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded", cookie }, body: new URLSearchParams(corpo) });
+  const entrar = async (b, senha) => { const r = await form(b, "/painel/entrar", { senha }); return { status: r.status, cookie: r.headers.get("set-cookie")?.split(";")[0] }; };
+
+  const { cookie } = await entrar(base, "senha-da-env");
+  assert.equal((await fetch(`${base}/painel/perfil`, { redirect: "manual" })).status, 302, "perfil exige login");
+  assert.match(await (await fetch(`${base}/painel/perfil`, { headers: { cookie } })).text(), /Trocar a senha/);
+
+  assert.equal((await form(base, "/painel/perfil", { nome: "Clebson Silva", whatsapp: "(84) 98888-7777" }, cookie)).status, 302);
+  assert.match(await (await fetch(`${base}/config.js`)).text(), /"whatsapp":"5584988887777"/);
+  assert.equal((await form(base, "/painel/perfil", { nome: "C", whatsapp: "123" }, cookie)).status, 400);
+
+  assert.equal((await form(base, "/painel/perfil/senha", { atual: "errada", nova: "nova-senha-1", repetir: "nova-senha-1" }, cookie)).status, 401);
+  assert.equal((await form(base, "/painel/perfil/senha", { atual: "senha-da-env", nova: "curta", repetir: "curta" }, cookie)).status, 400);
+  assert.equal((await form(base, "/painel/perfil/senha", { atual: "senha-da-env", nova: "nova-senha-1", repetir: "outra-coisa" }, cookie)).status, 400);
+  const trocou = await form(base, "/painel/perfil/senha", { atual: "senha-da-env", nova: "nova-senha-1", repetir: "nova-senha-1" }, cookie);
+  assert.equal(trocou.status, 302);
+  const novoCookie = trocou.headers.get("set-cookie").split(";")[0];
+  assert.equal((await fetch(`${base}/painel`, { redirect: "manual", headers: { cookie } })).status, 302, "cookie antigo deixa de valer");
+  assert.equal((await fetch(`${base}/painel`, { redirect: "manual", headers: { cookie: novoCookie } })).status, 200);
+  assert.equal((await entrar(base, "senha-da-env")).status, 401, "a senha da env deixa de valer");
+  assert.doesNotMatch(readFileSync(join(dir, "painel.json"), "utf8"), /nova-senha-1/, "a senha não fica gravada em texto");
+
+  // sobrevive a reinício do servidor (deploy)
+  const base2 = subir();
+  assert.equal((await entrar(base2, "nova-senha-1")).status, 302);
+  assert.equal((await entrar(base2, "senha-da-env")).status, 401);
+  assert.match(await (await fetch(`${base2}/config.js`)).text(), /Clebson Silva/);
+});

@@ -28,13 +28,13 @@ const numero = (n) => (n ? n.toFixed(2).replace(".", ",") : "");
 
 // Colunas na ordem em que o simulador oficial da 21Go pede os dados.
 const COLUNAS = [
-  ["Nome", (c) => c.nome],
+  ["Nome", (c) => c.nome, true],
   ["WhatsApp", (c) => c.whatsapp],
   ["E-mail", (c) => c.email],
-  ["Placa", (c) => (c.zeroKm ? "0 km" : c.placa)],
+  ["Placa", (c) => (c.zeroKm ? "0 km" : c.placa), true],
   ["Tipo", (c) => TIPOS[c.tipo] || c.tipo],
   ["Marca", (c) => c.marca],
-  ["Modelo", (c) => c.modelo],
+  ["Modelo", (c) => c.modelo, true],
   ["Ano", (c) => c.ano],
   ["Leilão", (c) => simNao(c.leilao)],
   ["App", (c) => simNao(c.app)],
@@ -50,18 +50,45 @@ const cabeca = (titulo) => `<!doctype html><html lang="pt-BR"><head><meta charse
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/painel.css"></head>`;
 
+// Botão "Mostrar" dos campos de senha (login e perfil).
+const VER_SENHA = `<script>
+document.querySelectorAll("[data-ver]").forEach((b) => b.addEventListener("click", () => {
+  const campo = document.getElementById(b.dataset.ver), ver = campo.type === "password";
+  campo.type = ver ? "text" : "password";
+  b.textContent = ver ? "Ocultar" : "Mostrar";
+  b.setAttribute("aria-pressed", String(ver));
+}));
+</script>`;
+const campoSenha = (id, rotulo, auto, extra = "") => `<label for="${id}">${rotulo}</label>
+  <div class="senha"><input id="${id}" name="${id}" type="password" autocomplete="${auto}" required ${extra}>
+  <button type="button" class="ver" data-ver="${id}" aria-pressed="false">Mostrar</button></div>`;
+
 export function paginaEntrar(erro = "") {
-  return `${cabeca("Painel de cotações")}<body class="entrar">
+  return `${cabeca("Painel do consultor")}<body class="entrar">
 <form method="post" action="/painel/entrar" class="entrar-cx">
-  <h1>Painel de cotações</h1>
-  <label for="senha">Senha</label>
-  <input id="senha" name="senha" type="password" autocomplete="current-password" required autofocus${erro ? ' aria-invalid="true" aria-describedby="erro"' : ""}>
+  <p class="logo">21Go <span>painel do consultor</span></p>
+  <h1>Entre para ver as cotações</h1>
+  ${campoSenha("senha", "Senha", "current-password", `autofocus${erro ? ' aria-invalid="true" aria-describedby="erro"' : ""}`)}
   <p class="erro" id="erro" role="alert">${esc(erro)}</p>
   <button class="bt bt-p">Entrar</button>
-</form></body></html>`;
+</form>${VER_SENHA}</body></html>`;
 }
 
+// Moldura comum do painel: marca, navegação e saída sempre no mesmo lugar.
+const moldura = (titulo, ativo, corpo) => `${cabeca(titulo)}<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<header class="topo">
+  <a class="logo" href="/painel">21Go <span>painel do consultor</span></a>
+  <nav aria-label="Seções do painel">
+    <a href="/painel"${ativo === "cotacoes" ? ' aria-current="page"' : ""}>Cotações</a>
+    <a href="/painel/perfil"${ativo === "perfil" ? ' aria-current="page"' : ""}>Perfil</a>
+  </nav>
+  <a class="sair" href="/painel/sair">Sair</a>
+</header>
+${corpo}</body></html>`;
+
 const noCrm = (c) => (c.crm?.ok ? "Enviada" : c.crm ? "Falhou" : "");
+const pilula = (c) => `<span class="pill st-${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>`;
 
 export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl }) {
   const conta = (s) => cotacoes.filter((c) => c.status === s).length;
@@ -72,29 +99,29 @@ export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl }) {
     .map(([k, rotulo, n]) => `<a href="/painel${k ? `?status=${k}` : ""}"${k === filtro ? ' aria-current="true"' : ""}>${rotulo} <span>${n}</span></a>`).join("");
 
   const linhas = visiveis.map((c) => `<tr${aberta?.id === c.id ? ' class="aberta"' : ""}>
-    <td class="fixa"><a href="${q(c.id)}">Abrir</a></td>
+    <td class="fixa m"><a class="abrir" href="${q(c.id)}" aria-label="Abrir a cotação de ${esc(c.nome)}">Abrir</a></td>
     <td>${esc(quando(c.ts))}</td>
-    <td class="st st-${esc(c.status)}">${esc(STATUS[c.status] || c.status)}${c.vistaEm ? " · cliente abriu" : ""}</td>
+    <td class="m">${pilula(c)}${c.vistaEm ? ' <span class="nota">cliente abriu</span>' : ""}</td>
     ${crmUrl ? `<td class="crm-${c.crm?.ok ? "ok" : "falha"}">${noCrm(c)}</td>` : ""}
-    ${COLUNAS.map(([, v]) => { const t = esc(v(c) ?? ""); return `<td>${t ? `<button type="button" class="cp">${t}</button>` : ""}</td>`; }).join("")}
+    ${COLUNAS.map(([, v, m]) => { const t = esc(v(c) ?? ""); return `<td${m ? ' class="m"' : ""}>${t ? `<button type="button" class="cp" title="Copiar">${t}</button>` : ""}</td>`; }).join("")}
   </tr>`).join("");
 
-  return `${cabeca(`Cotações (${cotacoes.length})`)}<body>
-<header class="barra">
-  <strong>Cotações 21Go</strong>
+  return moldura(`Cotações (${cotacoes.length})`, "cotacoes", `
+<div class="ferramentas">
   <nav class="filtros" aria-label="Filtrar por status">${filtros}</nav>
   <input type="search" id="busca" placeholder="Buscar nome, placa, modelo" aria-label="Buscar na planilha">
   <a class="bt" href="/painel/planilha.csv">Baixar planilha</a>
-  <a class="sair" href="/painel/sair">Sair</a>
-</header>
+</div>
 <div class="area${aberta ? " com-gaveta" : ""}">
-  <main class="planilha">
-    ${visiveis.length ? `<table>
-      <thead><tr><th class="fixa"></th><th>Pedido em</th><th>Status</th>${crmUrl ? "<th>PowerCRM</th>" : ""}${COLUNAS.map(([n]) => `<th>${n}</th>`).join("")}</tr></thead>
+  <main class="planilha" id="conteudo">
+    ${visiveis.length ? `<div class="rolagem" tabindex="0" role="region" aria-label="Planilha de cotações"><table>
+      <thead><tr><th class="fixa m"><span class="sr">Abrir</span></th><th>Pedido em</th><th class="m">Status</th>${crmUrl ? "<th>PowerCRM</th>" : ""}${COLUNAS.map(([n, , m]) => `<th${m ? ' class="m"' : ""}>${n}</th>`).join("")}</tr></thead>
       <tbody>${linhas}</tbody>
-    </table>
-    <p class="dica">Clique em qualquer célula para copiar o valor e colar no sistema da 21Go.</p>`
-    : `<p class="vazio">${filtro ? "Nenhuma cotação com esse status." : "Nenhum pedido ainda. Quando alguém pedir cotação no site, aparece aqui."}</p>`}
+    </table></div>
+    <p class="dica">Clique em uma célula para copiar o valor. <span class="so-celular">No celular aparecem só as colunas principais; abra a linha para ver tudo.</span></p>
+    <p class="vazio" id="sem-busca" hidden>Nenhuma cotação com esse texto. Apague a busca para ver todas.</p>`
+    : `<div class="vazio"><p>${filtro ? "Nenhuma cotação com esse status." : "Nenhum pedido ainda. Quando alguém pedir cotação no site, ele aparece aqui."}</p>
+      ${filtro ? '<a class="bt" href="/painel">Ver todas</a>' : '<a class="bt" href="/" target="_blank" rel="noopener">Abrir o site</a>'}</div>`}
   </main>
   ${aberta ? gaveta(aberta, q(""), salvo, crmUrl) : ""}
 </div>
@@ -104,10 +131,10 @@ export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl }) {
   const aviso = document.getElementById("copiado");
   let t;
   const copiar = async (texto, el) => {
-    try { await navigator.clipboard.writeText(texto); } catch { return; }
+    try { await navigator.clipboard.writeText(texto); } catch { aviso.textContent = "O navegador bloqueou a cópia. Selecione o texto e copie à mão."; aviso.classList.add("on"); return; }
     aviso.textContent = "Copiado: " + texto.slice(0, 60); aviso.classList.add("on");
     el.classList.add("ok"); clearTimeout(t);
-    t = setTimeout(() => { aviso.classList.remove("on"); el.classList.remove("ok"); }, 1400);
+    t = setTimeout(() => { aviso.classList.remove("on"); el.classList.remove("ok"); }, 1600);
   };
   document.addEventListener("click", (e) => {
     const b = e.target.closest(".cp, [data-copiar]");
@@ -115,10 +142,55 @@ export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl }) {
   });
   document.getElementById("busca").addEventListener("input", (e) => {
     const termo = e.target.value.trim().toLowerCase();
-    document.querySelectorAll("tbody tr").forEach((tr) => { tr.hidden = termo && !tr.textContent.toLowerCase().includes(termo); });
+    let achou = 0;
+    document.querySelectorAll("tbody tr").forEach((tr) => { tr.hidden = Boolean(termo) && !tr.textContent.toLowerCase().includes(termo); achou += !tr.hidden; });
+    const vazio = document.getElementById("sem-busca");
+    if (vazio) vazio.hidden = achou > 0;
   });
+  // valores alterados e não salvos: avisa antes de sair da cotação aberta
+  const form = document.querySelector(".gaveta form[data-valores]");
+  if (form) {
+    let sujo = false;
+    form.addEventListener("input", () => { sujo = true; });
+    form.addEventListener("submit", () => { sujo = false; });
+    addEventListener("beforeunload", (e) => { if (sujo) e.preventDefault(); });
+  }
 })();
-</script></body></html>`;
+</script>`);
+}
+
+export function paginaPerfil({ nome, whatsapp, senhaTrocada, erros = {}, salvo = "" }) {
+  const aviso = { dados: "Dados salvos.", senha: "Senha trocada. Os outros aparelhos que estavam conectados vão precisar entrar de novo." }[salvo];
+  const erro = (k) => (erros[k] ? `<p class="erro" id="erro-${k}" role="alert">${esc(erros[k])}</p>` : "");
+  const inv = (k) => (erros[k] ? ` aria-invalid="true" aria-describedby="erro-${k}"` : "");
+  return moldura("Perfil", "perfil", `
+<main class="perfil" id="conteudo">
+  <h1>Perfil</h1>
+  ${aviso ? `<p class="ok-msg" role="status">${aviso}</p>` : ""}
+  <form method="post" action="/painel/perfil" class="cartao">
+    <h2>Seus dados</h2>
+    <p class="ajuda">Aparecem na página da cotação e na mensagem enviada ao cliente.</p>
+    <label for="nome">Nome</label>
+    <input id="nome" name="nome" type="text" autocomplete="name" required maxlength="60" value="${esc(nome)}"${inv("nome")}>
+    ${erro("nome")}
+    <label for="whatsapp">Seu WhatsApp</label>
+    <input id="whatsapp" name="whatsapp" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="(84) 99999-9999" value="${esc(tel(whatsapp.replace(/^55/, "")))}"${inv("whatsapp")} aria-describedby="ajuda-zap${erros.whatsapp ? " erro-whatsapp" : ""}">
+    <p class="ajuda" id="ajuda-zap">É para este número que vão os botões "Quero o plano" e "Chamar no WhatsApp" do site. Sem ele, esses botões não aparecem.</p>
+    ${erro("whatsapp")}
+    <button class="bt bt-p">Salvar dados</button>
+  </form>
+  <form method="post" action="/painel/perfil/senha" class="cartao">
+    <h2>Trocar a senha do painel</h2>
+    <p class="ajuda">${senhaTrocada ? "" : "Hoje a senha é a que foi configurada no servidor. "}A nova senha precisa ter pelo menos 8 caracteres.</p>
+    ${campoSenha("atual", "Senha atual", "current-password", inv("atual"))}
+    ${erro("atual")}
+    ${campoSenha("nova", "Nova senha", "new-password", `minlength="8"${inv("nova")}`)}
+    ${erro("nova")}
+    ${campoSenha("repetir", "Repita a nova senha", "new-password", `minlength="8"${inv("repetir")}`)}
+    ${erro("repetir")}
+    <button class="bt bt-p">Trocar senha</button>
+  </form>
+</main>${VER_SENHA}`);
 }
 
 function blocoCrm(c, crmUrl) {
@@ -132,42 +204,66 @@ function blocoCrm(c, crmUrl) {
 function blocoDocs(c) {
   if (!c.docs) return "";
   const plano = PLANOS.find((p) => p.chave === c.planoEscolhido);
-  return `<div class="docs-painel"><h3>Documentos do cliente</h3>
+  return `<div class="docs-painel">
     ${plano ? `<p>Plano escolhido: <strong>${plano.nome}</strong></p>` : ""}
     <ul>${Object.entries(DOCS).map(([k, [nome]]) => `<li>${c.docs[k]
       ? `<a href="/painel/${esc(c.id)}/doc/${k}" target="_blank" rel="noopener">${nome}</a> <span>${esc(quando(c.docs[k].em))}</span>`
       : `${nome} <span>não enviado</span>`}</li>`).join("")}</ul>
-    <form method="post" action="/painel/${esc(c.id)}/docs/apagar" onsubmit="return confirm('Apagar os documentos deste cliente? Não dá para desfazer.')"><button class="bt">Apagar documentos</button></form></div>`;
+    <form method="post" action="/painel/${esc(c.id)}/docs/apagar" onsubmit="return confirm('Apagar os documentos deste cliente? Não dá para desfazer.')"><button class="bt bt-perigo">Apagar documentos</button></form></div>`;
 }
 
 function gaveta(c, voltar, salvo, crmUrl) {
   const v = c.valores || {};
   const veiculo = [c.marca, c.modelo, c.ano].filter(Boolean).join(" ");
   const tudo = COLUNAS.map(([n, f]) => `${n}: ${f(c) ?? ""}`).join("\n");
+  const zap = c.whatsapp.length <= 11 ? "55" + c.whatsapp : c.whatsapp;
   return `<aside class="gaveta" aria-label="Cotação de ${esc(c.nome)}">
-  <a class="fechar" href="${voltar}">Fechar</a>
-  <h2>${esc(c.nome)}</h2>
-  <p class="sub">${esc(veiculo)} · ${esc(c.zeroKm ? "0 km" : c.placa || "sem placa")} · ${esc(c.cidade)}<br>${esc(tel(c.whatsapp))} · pedido em ${esc(quando(c.ts))}</p>
-  <button type="button" class="bt" data-copiar="${esc(tudo)}">Copiar todos os dados</button>
-  ${blocoCrm(c, crmUrl)}
-  ${blocoDocs(c)}
-  ${salvo ? '<p class="ok-msg" role="status">Cotação salva.</p>' : ""}
-  <form method="post" action="/painel/${esc(c.id)}">
-    <h3>Valores que o sistema da 21Go deu</h3>
-    <div class="valores">
-      ${PLANOS.map((p) => `<label>${p.nome}<span class="rs"><input name="${p.chave}" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${numero(v[p.chave])}"></span></label>`).join("")}
-      <label>Taxa de ativação<span class="rs"><input name="ativacao" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${numero(v.ativacao)}"></span></label>
-    </div>
-    <p class="ajuda">Deixe em branco o plano que não quiser oferecer.</p>
-    <label class="bloco">Observação para o cliente<textarea name="obs" rows="3" maxlength="500" placeholder="Ex.: valor com rastreador incluso.">${esc(c.obs || "")}</textarea></label>
-    <label class="bloco">Status<select name="status">${Object.entries(STATUS).map(([k, r]) => `<option value="${k}"${k === c.status ? " selected" : ""}>${r}</option>`).join("")}</select></label>
-    <button class="bt bt-p">Salvar cotação</button>
-  </form>
-  ${c.valores ? `<div class="envio">
-    <a class="bt bt-zap" href="/painel/${esc(c.id)}/enviar" target="_blank" rel="noopener">Enviar cotação no WhatsApp</a>
-    <a class="bt" href="/c/${esc(c.id)}" target="_blank" rel="noopener">Ver a página do cliente</a>
-    <p class="ajuda">${c.enviadaEm ? `Enviada em ${esc(quando(c.enviadaEm))}. ` : ""}${c.vistaEm ? `Cliente abriu em ${esc(quando(c.vistaEm))}.` : c.enviadaEm ? "Cliente ainda não abriu." : ""}</p>
-  </div>` : '<p class="ajuda">Salve pelo menos um valor para liberar o envio no WhatsApp.</p>'}
+  <div class="gaveta-topo">
+    <div><h2>${esc(c.nome)}</h2>${pilula(c)}</div>
+    <a class="fechar" href="${voltar}">Fechar</a>
+  </div>
+  <dl class="resumo">
+    <div><dt>Veículo</dt><dd>${esc(veiculo)}</dd></div>
+    <div><dt>Placa</dt><dd>${esc(c.zeroKm ? "0 km" : c.placa || "sem placa")}</dd></div>
+    <div><dt>Cidade</dt><dd>${esc(c.cidade)}</dd></div>
+    <div><dt>WhatsApp</dt><dd><a href="https://wa.me/${esc(zap)}" target="_blank" rel="noopener">${esc(tel(c.whatsapp))}</a></dd></div>
+    <div><dt>Pedido em</dt><dd>${esc(quando(c.ts))}</dd></div>
+  </dl>
+
+  <section>
+    <h3><span class="passo">1</span> Cote no sistema da 21Go</h3>
+    ${blocoCrm(c, crmUrl)}
+    <button type="button" class="bt" data-copiar="${esc(tudo)}">Copiar todos os dados</button>
+  </section>
+
+  <section>
+    <h3><span class="passo">2</span> Informe os valores</h3>
+    ${salvo ? '<p class="ok-msg" role="status">Cotação salva.</p>' : ""}
+    <form method="post" action="/painel/${esc(c.id)}" data-valores>
+      <div class="valores">
+        ${PLANOS.map((p) => `<label>${p.nome}<span class="rs"><input name="${p.chave}" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${numero(v[p.chave])}"></span></label>`).join("")}
+        <label>Taxa de ativação<span class="rs"><input name="ativacao" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${numero(v.ativacao)}"></span></label>
+      </div>
+      <p class="ajuda">Deixe em branco o plano que não quiser oferecer.</p>
+      <label class="bloco">Observação para o cliente<textarea name="obs" rows="3" maxlength="500" placeholder="Ex.: valor com rastreador incluso.">${esc(c.obs || "")}</textarea></label>
+      <label class="bloco">Status<select name="status">${Object.entries(STATUS).map(([k, r]) => `<option value="${k}"${k === c.status ? " selected" : ""}>${r}</option>`).join("")}</select></label>
+      <button class="bt bt-p">Salvar cotação</button>
+    </form>
+  </section>
+
+  <section>
+    <h3><span class="passo">3</span> Envie ao cliente</h3>
+    ${c.valores ? `<div class="envio">
+      <a class="bt bt-zap" href="/painel/${esc(c.id)}/enviar" target="_blank" rel="noopener">Enviar cotação no WhatsApp</a>
+      <a class="bt" href="/c/${esc(c.id)}" target="_blank" rel="noopener">Ver a página do cliente</a>
+      <p class="ajuda">${c.enviadaEm ? `Enviada em ${esc(quando(c.enviadaEm))}. ` : "Ainda não enviada. "}${c.vistaEm ? `Cliente abriu em ${esc(quando(c.vistaEm))}.` : c.enviadaEm ? "Cliente ainda não abriu." : ""}</p>
+    </div>` : '<p class="ajuda">Salve pelo menos um valor no passo 2 para liberar o envio.</p>'}
+  </section>
+
+  <section>
+    <h3><span class="passo">4</span> Receba os documentos</h3>
+    ${blocoDocs(c) || '<p class="ajuda">O cliente envia CNH, documento do veículo e comprovante de residência pela página da cotação. Eles aparecem aqui.</p>'}
+  </section>
 </aside>`;
 }
 
@@ -193,7 +289,7 @@ export function paginaCotacao(c, cfg) {
 
   return `${cabeca(`Cotação 21Go: ${veiculo}`)}<body class="cot">
 <header class="cot-topo"><div class="cot-wrap">
-  <p class="marca">21Go <span>com Clebson Isaias, consultor em Natal</span></p>
+  <p class="marca">21Go <span>com ${esc(cfg.consultor)}, consultor em Natal</span></p>
   <h1>${esc(primeiro)}, esta é a cotação do seu ${esc(veiculo)}</h1>
   <p class="lead">${esc(c.zeroKm ? "Veículo 0 km" : `Placa ${c.placa}`)} · ${esc(c.cidade)}${c.app ? " · uso em aplicativo" : ""}${c.leilao ? " · veículo de leilão" : ""}</p>
 </div></header>

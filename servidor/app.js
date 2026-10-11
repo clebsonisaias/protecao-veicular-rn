@@ -6,11 +6,11 @@
  */
 
 import express from "express";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DOCS, PLANOS, STATUS, brl, csvCotacoes, paginaCotacao, paginaEntrar, paginaPainel } from "./paginas.js";
+import { DOCS, PLANOS, STATUS, brl, csvCotacoes, paginaCotacao, paginaEntrar, paginaPainel, paginaPerfil } from "./paginas.js";
 
 export const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIR_PUBLICO = join(RAIZ, "publico");
@@ -204,10 +204,17 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
   const banco = abrirCotacoes(dirDados);
   const achar = (id) => (/^[\w-]{12}$/.test(id) ? banco.lista.find((c) => c.id === id) : undefined);
 
-  const cfg = {
-    whatsapp: (env.WHATSAPP || "").replace(/\D/g, ""),
-    simuladorUrl: env.SIMULADOR_URL || "",
+  // Perfil do consultor: o que ele muda pelo painel vale mais que as envs.
+  const arqPerfil = join(dirDados, "painel.json");
+  const perfil = existsSync(arqPerfil) ? JSON.parse(readFileSync(arqPerfil, "utf8")) : {};
+  const salvarPerfil = () => { writeFileSync(arqPerfil + ".tmp", JSON.stringify(perfil)); renameSync(arqPerfil + ".tmp", arqPerfil); };
+
+  const cfg = { simuladorUrl: env.SIMULADOR_URL || "" };
+  const aplicarPerfil = () => {
+    cfg.whatsapp = perfil.whatsapp || (env.WHATSAPP || "").replace(/\D/g, "");
+    cfg.consultor = perfil.nome || "Clebson Isaias";
   };
+  aplicarPerfil();
 
   const crm = clienteCrm(env.CRM_FORM_URL, buscar);
   // Nunca derruba o pedido: o resultado fica na cotação e aparece no painel.
@@ -223,9 +230,15 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
   }
 
   // Painel: sem env nova em produção, a senha é o LEADS_TOKEN que já existe.
-  const senha = env.PAINEL_SENHA || env.LEADS_TOKEN || "";
-  const assinatura = senha ? createHmac("sha256", senha).update("painel").digest("hex") : "";
-  const logado = (req) => Boolean(assinatura) && igual(lerCookie(req, "painel"), assinatura);
+  // Depois que o consultor troca a senha no Perfil, vale o hash gravado e a env é ignorada.
+  const senhaEnv = env.PAINEL_SENHA || env.LEADS_TOKEN || "";
+  const temPainel = () => Boolean(perfil.senhaHash || senhaEnv);
+  const hashSenha = (texto, sal) => scryptSync(String(texto ?? ""), sal, 32).toString("hex");
+  const senhaConfere = (texto) => (perfil.senhaHash ? igual(hashSenha(texto, perfil.sal), perfil.senhaHash) : Boolean(senhaEnv) && igual(texto, senhaEnv));
+  // trocar a senha troca o segredo: os cookies antigos param de valer
+  const assinatura = () => createHmac("sha256", perfil.segredo || senhaEnv).update("painel").digest("hex");
+  const logado = (req) => temPainel() && igual(lerCookie(req, "painel"), assinatura());
+  const darCookie = (req, res) => res.cookie("painel", assinatura(), { httpOnly: true, sameSite: "lax", secure: req.secure, maxAge: 30 * 86_400_000, path: "/" });
 
   const app = express();
   app.set("trust proxy", 1);
@@ -317,7 +330,7 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
   const painel = express.Router();
   const tentativa = limitador(10);
   painel.use(express.urlencoded({ extended: false, limit: "16kb" }), (req, res, proximo) => {
-    if (!senha) return res.status(404).end(); // sem senha configurada o painel não existe
+    if (!temPainel()) return res.status(404).end(); // sem senha configurada o painel não existe
     res.setHeader("Cache-Control", "no-store");
     // formulário vindo de outro site não entra (o cookie Lax já barra o resto)
     const origem = req.get("origin");
@@ -327,12 +340,44 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
   painel.get("/entrar", (req, res) => (logado(req) ? res.redirect("/painel") : res.type("html").send(paginaEntrar())));
   painel.post("/entrar", (req, res) => {
     if (!tentativa(req.ip)) return res.status(429).type("html").send(paginaEntrar("Muitas tentativas. Espere uma hora e tente de novo."));
-    if (!igual(req.body.senha, senha)) return res.status(401).type("html").send(paginaEntrar("Senha incorreta."));
-    res.cookie("painel", assinatura, { httpOnly: true, sameSite: "lax", secure: req.secure, maxAge: 30 * 86_400_000, path: "/" });
+    if (!senhaConfere(req.body.senha)) return res.status(401).type("html").send(paginaEntrar("Senha incorreta."));
+    darCookie(req, res);
     res.redirect("/painel");
   });
   painel.use((req, res, proximo) => (logado(req) ? proximo() : res.redirect("/painel/entrar")));
   painel.get("/sair", (_req, res) => { res.clearCookie("painel", { path: "/" }); res.redirect("/painel/entrar"); });
+
+  // ---- perfil (antes das rotas /:id, senão "perfil" viraria id de cotação) ----
+  const verPerfil = (res, extra = {}, status = 200) => res.status(status).type("html")
+    .send(paginaPerfil({ nome: cfg.consultor, whatsapp: perfil.whatsapp || "", senhaTrocada: Boolean(perfil.senhaHash), ...extra }));
+  painel.get("/perfil", (req, res) => verPerfil(res, { salvo: String(req.query.ok || "") }));
+  painel.post("/perfil", (req, res) => {
+    const nome = String(req.body.nome ?? "").trim().slice(0, 60);
+    const d = String(req.body.whatsapp ?? "").replace(/\D/g, "");
+    const erros = {};
+    if (nome.length < 2) erros.nome = "Digite seu nome.";
+    if (d && (d.length < 10 || d.length > 13)) erros.whatsapp = "Número com DDD, só dígitos. Ex.: (84) 99999-9999.";
+    if (Object.keys(erros).length) return verPerfil(res, { erros, nome }, 400);
+    perfil.nome = nome;
+    perfil.whatsapp = d ? (d.length <= 11 ? "55" + d : d) : "";
+    salvarPerfil(); aplicarPerfil();
+    res.redirect("/painel/perfil?ok=dados");
+  });
+  painel.post("/perfil/senha", (req, res) => {
+    const { atual, nova, repetir } = req.body;
+    if (!tentativa(req.ip)) return verPerfil(res, { erros: { atual: "Muitas tentativas. Espere uma hora e tente de novo." } }, 429);
+    if (!senhaConfere(atual)) return verPerfil(res, { erros: { atual: "A senha atual não confere." } }, 401);
+    const erros = {};
+    if (typeof nova !== "string" || nova.length < 8 || nova.length > 200) erros.nova = "A nova senha precisa ter de 8 a 200 caracteres.";
+    else if (nova !== repetir) erros.repetir = "As duas senhas novas não são iguais.";
+    if (Object.keys(erros).length) return verPerfil(res, { erros }, 400);
+    perfil.sal = randomBytes(16).toString("hex");
+    perfil.senhaHash = hashSenha(nova, perfil.sal);
+    perfil.segredo = randomBytes(32).toString("hex");
+    salvarPerfil();
+    darCookie(req, res); // este aparelho continua dentro
+    res.redirect("/painel/perfil?ok=senha");
+  });
 
   painel.get("/", (req, res) => {
     const filtro = Object.hasOwn(STATUS, req.query.status) ? req.query.status : "";
@@ -389,7 +434,7 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
     c.enviadaEm = new Date().toISOString();
     banco.salvar();
     const link = `${req.protocol}://${req.get("host")}/c/${c.id}`;
-    res.redirect(`https://wa.me/${paraWa(c.whatsapp)}?text=${encodeURIComponent(mensagemCotacao(c, link))}`);
+    res.redirect(`https://wa.me/${paraWa(c.whatsapp)}?text=${encodeURIComponent(mensagemCotacao(c, link, cfg.consultor))}`);
   });
   app.use("/painel", painel);
   app.get("/leads", (_req, res) => res.redirect("/painel")); // endereço antigo da tabela
@@ -398,10 +443,10 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
   return { app, cfg, arquivo: banco.arquivo };
 }
 
-export function mensagemCotacao(c, link) {
+export function mensagemCotacao(c, link, consultor = "Clebson Isaias") {
   const veiculo = [c.marca, c.modelo, c.ano].filter(Boolean).join(" ");
   return [
-    `Olá, ${c.nome.split(" ")[0]}! Aqui é o Clebson, consultor 21Go.`,
+    `Olá, ${c.nome.split(" ")[0]}! Aqui é ${consultor.split(" ")[0]}, consultor 21Go.`,
     `Sua cotação para o ${veiculo} ficou pronta:`,
     "",
     ...PLANOS.filter((p) => c.valores[p.chave]).map((p) => `${p.nome}: ${brl(c.valores[p.chave])} por mês`),
