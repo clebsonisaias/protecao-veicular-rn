@@ -7,10 +7,10 @@
 
 import express from "express";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PLANOS, STATUS, brl, csvCotacoes, paginaCotacao, paginaEntrar, paginaPainel } from "./paginas.js";
+import { DOCS, PLANOS, STATUS, brl, csvCotacoes, paginaCotacao, paginaEntrar, paginaPainel } from "./paginas.js";
 
 export const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIR_PUBLICO = join(RAIZ, "publico");
@@ -68,6 +68,18 @@ export function lerValor(v) {
   if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
   const n = Number(t);
   return t && Number.isFinite(n) && n > 0 && n < 100000 ? Math.round(n * 100) / 100 : null;
+}
+
+/** Tipo real do arquivo pelos primeiros bytes; o nome e o content-type vêm do cliente e não valem. */
+export function tipoDoArquivo(b) {
+  if (!Buffer.isBuffer(b) || b.length < 12) return null;
+  const txt = (i, f) => b.toString("latin1", i, f);
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { ext: "jpg", mime: "image/jpeg" };
+  if (txt(0, 8) === "\x89PNG\r\n\x1a\n") return { ext: "png", mime: "image/png" };
+  if (txt(0, 5) === "%PDF-") return { ext: "pdf", mime: "application/pdf" };
+  if (txt(0, 4) === "RIFF" && txt(8, 12) === "WEBP") return { ext: "webp", mime: "image/webp" };
+  if (txt(4, 8) === "ftyp" && /^(heic|heix|hevc|mif1|msf1)$/.test(txt(8, 12))) return { ext: "heic", mime: "image/heic" };
+  return null;
 }
 
 const novoId = () => randomBytes(9).toString("base64url");
@@ -275,6 +287,32 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
     res.type("html").setHeader("Cache-Control", "no-store").send(paginaCotacao(c, cfg));
   });
 
+  // ---- documentos para fechar (CNH, documento do veículo, comprovante) ----
+  // O cliente envia pelo link da cotação; só o painel consegue abrir de volta.
+  const dirDocs = join(dirDados, "docs");
+  const apagarDoc = (id, tipo) => {
+    const dir = join(dirDocs, id);
+    if (existsSync(dir)) for (const f of readdirSync(dir)) if (f.startsWith(tipo + ".")) rmSync(join(dir, f));
+  };
+  const envioDoc = limitador(40);
+  app.put("/c/:id/doc/:tipo", express.raw({ type: () => true, limit: "10mb" }), (req, res) => {
+    const c = achar(req.params.id), tipo = req.params.tipo;
+    if (!c || !Object.hasOwn(DOCS, tipo)) return res.status(404).json({ erro: "Cotação não encontrada." });
+    if (!c.valores) return res.status(409).json({ erro: "A cotação ainda não está pronta." });
+    if (!envioDoc(req.ip)) return res.status(429).json({ erro: "Muitos envios. Tente de novo mais tarde." });
+    const arquivo = tipoDoArquivo(req.body);
+    if (!arquivo) return res.status(415).json({ erro: "Envie uma foto (JPG, PNG) ou um PDF." });
+    mkdirSync(join(dirDocs, c.id), { recursive: true });
+    apagarDoc(c.id, tipo); // reenvio substitui o anterior
+    writeFileSync(join(dirDocs, c.id, `${tipo}.${arquivo.ext}`), req.body);
+    c.docs = { ...c.docs, [tipo]: { ext: arquivo.ext, mime: arquivo.mime, em: new Date().toISOString() } };
+    if (PLANOS.some((p) => p.chave === req.query.plano)) c.planoEscolhido = req.query.plano;
+    if (c.status === "nova" || c.status === "enviada") c.status = "documentos";
+    banco.salvar();
+    log.info(`[docs] ${c.nome}: ${tipo} (${Object.keys(c.docs).length} de ${Object.keys(DOCS).length})`);
+    res.json({ ok: true });
+  });
+
   // ---- painel do consultor ----
   const painel = express.Router();
   const tentativa = limitador(10);
@@ -306,6 +344,22 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
   painel.get("/planilha.csv", (_req, res) => {
     res.type("text/csv").setHeader("Content-Disposition", 'attachment; filename="cotacoes-21go.csv"');
     res.send(csvCotacoes([...banco.lista].reverse()));
+  });
+  painel.get("/:id/doc/:tipo", (req, res) => {
+    const c = achar(req.params.id), doc = c?.docs?.[req.params.tipo];
+    if (!doc || !Object.hasOwn(DOCS, req.params.tipo)) return res.status(404).end();
+    // arquivo veio de fora: abre isolado, sem poder rodar script na origem do painel
+    res.setHeader("Content-Security-Policy", "sandbox");
+    res.setHeader("Content-Disposition", `inline; filename="${req.params.tipo}-${c.id}.${doc.ext}"`);
+    res.type(doc.mime).sendFile(join(dirDocs, c.id, `${req.params.tipo}.${doc.ext}`));
+  });
+  painel.post("/:id/docs/apagar", (req, res) => {
+    const c = achar(req.params.id);
+    if (!c) return res.status(404).end();
+    rmSync(join(dirDocs, c.id), { recursive: true, force: true });
+    delete c.docs;
+    banco.salvar();
+    res.redirect(`/painel?id=${c.id}`);
   });
   painel.post("/:id/crm", async (req, res) => {
     const c = achar(req.params.id);

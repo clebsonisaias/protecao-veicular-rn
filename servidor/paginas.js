@@ -3,7 +3,14 @@
 export const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 export const brl = (n) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-export const STATUS = { nova: "Nova", enviada: "Cotação enviada", fechou: "Fechou", perdeu: "Perdeu" };
+export const STATUS = { nova: "Nova", enviada: "Cotação enviada", documentos: "Documentos recebidos", fechou: "Fechou", perdeu: "Perdeu" };
+
+// O que a 21Go pede para fechar. A chave vira nome de arquivo e parte da URL.
+export const DOCS = {
+  cnh: ["CNH", "Aberta, frente e verso na mesma foto, com tudo legível."],
+  veiculo: ["Documento do veículo", "O CRLV, em foto ou no PDF do aplicativo."],
+  residencia: ["Comprovante de residência", "Conta de luz, água ou internet dos últimos 3 meses."],
+};
 
 // Coberturas copiadas de 21go.site em 06/10/2026 (as mesmas da página inicial).
 export const PLANOS = [
@@ -122,6 +129,17 @@ function blocoCrm(c, crmUrl) {
     <a class="bt" href="${esc(crmUrl)}" target="_blank" rel="noopener">Preencher no CRM à mão</a></div>`;
 }
 
+function blocoDocs(c) {
+  if (!c.docs) return "";
+  const plano = PLANOS.find((p) => p.chave === c.planoEscolhido);
+  return `<div class="docs-painel"><h3>Documentos do cliente</h3>
+    ${plano ? `<p>Plano escolhido: <strong>${plano.nome}</strong></p>` : ""}
+    <ul>${Object.entries(DOCS).map(([k, [nome]]) => `<li>${c.docs[k]
+      ? `<a href="/painel/${esc(c.id)}/doc/${k}" target="_blank" rel="noopener">${nome}</a> <span>${esc(quando(c.docs[k].em))}</span>`
+      : `${nome} <span>não enviado</span>`}</li>`).join("")}</ul>
+    <form method="post" action="/painel/${esc(c.id)}/docs/apagar" onsubmit="return confirm('Apagar os documentos deste cliente? Não dá para desfazer.')"><button class="bt">Apagar documentos</button></form></div>`;
+}
+
 function gaveta(c, voltar, salvo, crmUrl) {
   const v = c.valores || {};
   const veiculo = [c.marca, c.modelo, c.ano].filter(Boolean).join(" ");
@@ -132,6 +150,7 @@ function gaveta(c, voltar, salvo, crmUrl) {
   <p class="sub">${esc(veiculo)} · ${esc(c.zeroKm ? "0 km" : c.placa || "sem placa")} · ${esc(c.cidade)}<br>${esc(tel(c.whatsapp))} · pedido em ${esc(quando(c.ts))}</p>
   <button type="button" class="bt" data-copiar="${esc(tudo)}">Copiar todos os dados</button>
   ${blocoCrm(c, crmUrl)}
+  ${blocoDocs(c)}
   ${salvo ? '<p class="ok-msg" role="status">Cotação salva.</p>' : ""}
   <form method="post" action="/painel/${esc(c.id)}">
     <h3>Valores que o sistema da 21Go deu</h3>
@@ -183,6 +202,35 @@ export function paginaCotacao(c, cfg) {
   ${c.valores.ativacao ? `<p class="ativ">Taxa de ativação, paga uma vez: <strong>${esc(brl(c.valores.ativacao))}</strong></p>` : ""}
   ${c.obs ? `<p class="obs">${esc(c.obs)}</p>` : ""}
   <p class="proximo">${cfg.whatsapp ? "Escolha um plano e eu te chamo no WhatsApp para agendar a vistoria por vídeo." : "Para seguir, responda a mensagem que te enviei no WhatsApp com o plano escolhido."} A proteção começa a valer depois da vistoria e do pagamento da ativação.</p>
+  <section class="docs" id="documentos">
+    <h2>Escolheu o plano? Envie três documentos para fechar</h2>
+    <p>Pode ser foto tirada no celular ou PDF, até 10 MB cada. Só o consultor consegue abrir os arquivos, e eles são usados apenas para o seu cadastro na 21Go.</p>
+    <label class="docs-plano" for="doc-plano">Plano escolhido
+      <select id="doc-plano">${PLANOS.filter((p) => c.valores[p.chave]).map((p) => `<option value="${p.chave}"${p.chave === (c.planoEscolhido || "vip") ? " selected" : ""}>${p.nome}</option>`).join("")}</select>
+    </label>
+    <ul>${Object.entries(DOCS).map(([k, [nome, dica]]) => `<li>
+      <label for="doc-${k}"><strong>${nome}</strong><span>${dica}</span></label>
+      <input type="file" id="doc-${k}" data-doc="${k}" accept="image/*,application/pdf" aria-describedby="st-${k}">
+      <output id="st-${k}"${c.docs?.[k] ? ' class="ok"' : ""}>${c.docs?.[k] ? `Recebido em ${esc(quando(c.docs[k].em))}. Para trocar, envie de novo.` : ""}</output>
+    </li>`).join("")}</ul>
+  </section>
+  <script>
+  document.querySelectorAll("[data-doc]").forEach((campo) => campo.addEventListener("change", async () => {
+    const arquivo = campo.files[0], st = document.getElementById("st-" + campo.dataset.doc);
+    if (!arquivo) return;
+    st.className = "";
+    if (arquivo.size > 10 * 1024 * 1024) { st.className = "falha"; st.textContent = "Arquivo acima de 10 MB. Tire a foto em qualidade menor ou envie o PDF."; return; }
+    st.textContent = "Enviando...";
+    try {
+      const r = await fetch(location.pathname + "/doc/" + campo.dataset.doc + "?plano=" + document.getElementById("doc-plano").value, { method: "PUT", body: arquivo });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.erro || "O envio falhou. Tente de novo.");
+      st.className = "ok"; st.textContent = "Recebido. Para trocar, envie de novo.";
+    } catch (e) {
+      st.className = "falha"; st.textContent = e instanceof TypeError ? "Sem conexão. Confira a internet e envie de novo." : e.message;
+    }
+  }));
+  </script>
   <p class="legal">Valores calculados no sistema da 21Go para este veículo e sujeitos a confirmação na vistoria. Atendimento por consultor independente. A 21GO Associação de Proteção Patrimonial (CNPJ 40.902.817/0001-70) é uma associação mutualista regulamentada pela Lei Complementar 213/2025. Proteção veicular não é seguro.</p>
 </main></body></html>`;
 }
@@ -193,6 +241,7 @@ export function csvCotacoes(cotacoes) {
     ["Pedido em", (c) => quando(c.ts)], ["Status", (c) => STATUS[c.status] || c.status], ["PowerCRM", noCrm], ...COLUNAS,
     ...PLANOS.map((p) => [p.nome, (c) => numero(c.valores?.[p.chave])]),
     ["Taxa de ativação", (c) => numero(c.valores?.ativacao)], ["Observação", (c) => c.obs],
+    ["Documentos", (c) => (c.docs ? `${Object.keys(c.docs).length} de ${Object.keys(DOCS).length}` : "")],
   ];
   // célula começando com = + - @ vira fórmula no Excel: o apóstrofo desarma
   const cel = (v) => { const t = String(v ?? ""); return `"${(/^[=+\-@\t\r]/.test(t) ? "'" + t : t).replace(/"/g, '""')}"`; };

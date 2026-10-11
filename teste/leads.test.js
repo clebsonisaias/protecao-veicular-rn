@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
-import { criarApp, lerValor, validarLead } from "../servidor/app.js";
+import { criarApp, lerValor, tipoDoArquivo, validarLead } from "../servidor/app.js";
 
 const pastas = [];
 const pasta = () => { const d = mkdtempSync(join(tmpdir(), "pvrn-")); pastas.push(d); return d; };
@@ -188,4 +188,49 @@ test("sem CRM_FORM_URL as listas não existem e nada sai do servidor", async () 
   assert.equal((await fetch(`${base}/api/veiculos?tipo=carro`)).status, 404);
   assert.equal((await fetch(`${base}/api/leads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(OK) })).status, 200);
   assert.equal(JSON.parse(readFileSync(arquivo, "utf8"))[0].crm, undefined);
+});
+
+test("documentos: cliente envia pelo link, só o painel abre, e dá para apagar", async () => {
+  const { app, arquivo } = criarApp({ env: { DADOS_DIR: pasta(), PAINEL_SENHA: "s3nha" }, log: mudo });
+  const srv = app.listen(0);
+  after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  await fetch(`${base}/api/leads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(OK) });
+  const salva = () => JSON.parse(readFileSync(arquivo, "utf8"))[0];
+  const { id } = salva();
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40, 7)]);
+  const enviar = (tipo, corpo, q = "") => fetch(`${base}/c/${id}/doc/${tipo}${q}`, { method: "PUT", body: corpo });
+
+  assert.equal(tipoDoArquivo(jpg).ext, "jpg");
+  assert.equal(tipoDoArquivo(Buffer.from("%PDF-1.7 conteudo qualquer")).ext, "pdf");
+  assert.equal(tipoDoArquivo(Buffer.from("<script>alert(1)</script>")), null);
+
+  assert.equal((await enviar("cnh", jpg)).status, 409, "sem cotação pronta não aceita documento");
+  const entrou = await fetch(`${base}/painel/entrar`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "senha=s3nha" });
+  const cookie = entrou.headers.get("set-cookie").split(";")[0];
+  const painelPost = (caminho, corpo = "") => fetch(base + caminho, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded", cookie }, body: corpo });
+  await painelPost(`/painel/${id}`, "vip=227,41&status=enviada");
+
+  assert.equal((await enviar("cnh", Buffer.from("<script>alert(1)</script>"))).status, 415);
+  assert.equal((await enviar("../../x", jpg)).status, 404);
+  assert.equal((await enviar("passaporte", jpg)).status, 404);
+  assert.equal((await fetch(`${base}/c/naoexiste123/doc/cnh`, { method: "PUT", body: jpg })).status, 404);
+  assert.equal((await enviar("cnh", jpg, "?plano=vip")).status, 200);
+  assert.equal((await enviar("cnh", Buffer.from("%PDF-1.7 conteudo qualquer"))).status, 200, "reenvio substitui");
+  assert.equal(salva().status, "documentos");
+  assert.equal(salva().planoEscolhido, "vip");
+  assert.equal(salva().docs.cnh.ext, "pdf");
+
+  assert.match(await (await fetch(`${base}/c/${id}`)).text(), /Recebido em/);
+  assert.equal((await fetch(`${base}/painel/${id}/doc/cnh`, { redirect: "manual" })).status, 302, "sem login não abre documento");
+  const aberto = await fetch(`${base}/painel/${id}/doc/cnh`, { headers: { cookie } });
+  assert.equal(aberto.status, 200);
+  assert.equal(aberto.headers.get("content-type"), "application/pdf");
+  assert.equal(aberto.headers.get("content-security-policy"), "sandbox");
+  assert.match(await aberto.text(), /^%PDF-/);
+  assert.equal((await fetch(`${base}/painel/${id}/doc/veiculo`, { headers: { cookie } })).status, 404);
+
+  await painelPost(`/painel/${id}/docs/apagar`);
+  assert.equal(salva().docs, undefined);
+  assert.equal((await fetch(`${base}/painel/${id}/doc/cnh`, { headers: { cookie } })).status, 404);
 });

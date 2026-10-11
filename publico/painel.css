@@ -52,11 +52,16 @@ h1,h2,h3{font-family:var(--f-tit);letter-spacing:-.02em;margin:0}
 .cp:hover{background:var(--papel)}
 .cp.ok{background:var(--limao)}
 .st{font-weight:600}
-.st-nova{color:#b45309}.st-enviada{color:var(--azul)}.st-fechou{color:#15803d}.st-perdeu{color:var(--texto-2)}
+.st-documentos{color:#7c3aed}.st-nova{color:#b45309}.st-enviada{color:var(--azul)}.st-fechou{color:#15803d}.st-perdeu{color:var(--texto-2)}
 .crm-ok{color:#15803d;font-weight:600}.crm-falha{color:var(--erro);font-weight:600}
 .crm{margin:.9rem 0 0;padding:.6rem .75rem;border-radius:8px;background:var(--papel);font-size:.9rem;font-weight:500}
 .crm p{margin:0 0 .6rem}.crm form{display:inline}.crm .bt{margin:0 .4rem .2rem 0}
 .gaveta .crm form .bt{width:auto;margin-top:0}
+.docs-painel{margin:.9rem 0 0;padding:.75rem;border:1.5px solid var(--borda);border-radius:10px}
+.docs-painel h3{margin:0 0 .4rem}.docs-painel p{margin:0 0 .4rem}
+.docs-painel ul{margin:0 0 .6rem;padding:0;list-style:none;display:grid;gap:.3rem}
+.docs-painel a{color:var(--azul);font-weight:600}.docs-painel span{color:var(--texto-2);font-size:.85rem;margin-left:.3rem}
+.gaveta .docs-painel form .bt{width:auto;margin-top:0}
 .dica,.vazio{color:var(--texto-2);margin:.75rem .25rem}
 .vazio{font-size:1.05rem;padding:2rem 0}
 .aviso-copia{position:fixed;left:50%;bottom:1.25rem;translate:-50% 0;max-width:calc(100% - 2rem);padding:.6rem 1rem;border-radius:10px;background:var(--marinho);color:#fff;opacity:0;pointer-events:none;transition:opacity .15s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -115,6 +120,19 @@ main.cot-wrap{padding:2rem 0 3rem}
   .pl{border-bottom:0;border-right:1.5px solid var(--borda)}
   .pl:last-child{border-right:0}
 }
+.docs{margin:2.5rem 0 0;padding:1.5rem 1.4rem;background:#fff;border:1.5px solid var(--borda);border-radius:18px}
+.docs h2{font-size:1.4rem;line-height:1.15}
+.docs>p{margin:.5rem 0 1rem;color:var(--texto-2);max-width:65ch}
+.docs-plano{display:grid;gap:.3rem;max-width:16rem;font-weight:600}
+.docs-plano select{min-height:46px;padding:.5rem .7rem;border:1.5px solid var(--borda);border-radius:10px;background:#fff;font:inherit;color:var(--texto)}
+.docs ul{margin:1rem 0 0;padding:0;list-style:none}
+.docs li{display:grid;gap:.5rem;padding:1rem 0;border-top:1px solid var(--borda)}
+.docs li label{display:grid}.docs li label span{color:var(--texto-2);font-size:.9rem}
+.docs li>*{min-width:0}
+.docs input[type=file]{width:100%;font:inherit}
+.docs output{font-size:.9rem;font-weight:600;min-height:1.3rem}
+.docs output.ok{color:#15803d}.docs output.falha{color:var(--erro)}
+@media (min-width:760px){.docs li{grid-template-columns:1fr 1fr;align-items:center}.docs output{grid-column:1/-1}}
 .ativ{margin:1.5rem 0 0;font-size:1.05rem}
 .obs{margin:.75rem 0 0;padding:.9rem 1rem;border-left:4px solid var(--limao);background:#fff;white-space:pre-line}
 .proximo{margin:1.5rem 0 0;max-width:65ch}

@@ -17,7 +17,8 @@ npm run teste      # node --test
 2. `/painel` (senha): planilha com as colunas na ordem do simulador oficial. Clicar numa célula copia o valor. "Baixar planilha" gera CSV para Excel/Sheets.
 3. "Abrir" numa linha: digite o valor de cada plano e a taxa de ativação, salve, e clique em **Enviar cotação no WhatsApp**. Isso marca como **Cotação enviada** e abre a conversa do cliente com a mensagem e o link prontos.
 4. O cliente abre `/c/<id>` (link privado, fora do Google), vê os planos com os valores e clica em "Quero o plano X", que cai no seu WhatsApp. O painel mostra "cliente abriu".
-5. Feche a linha como **Fechou** ou **Perdeu**.
+5. Na mesma página o cliente envia os três documentos para fechar (CNH, documento do veículo, comprovante de residência), em foto ou PDF de até 10 MB. A linha vira **Documentos recebidos** e os arquivos abrem só pelo painel. "Apagar documentos" remove os arquivos do servidor: use depois de cadastrar no CRM.
+6. Feche a linha como **Fechou** ou **Perdeu**.
 
 ## Variáveis de ambiente
 
@@ -42,6 +43,7 @@ npm run teste      # node --test
 ## Dados
 
 - Arquivo: `DADOS_DIR/cotacoes.json` (lista com pedido, status, valores, data de envio e de abertura). Na primeira subida ele importa o `leads.jsonl` do site antigo, que fica como backup.
+- Documentos: `DADOS_DIR/docs/<id>/` (no mesmo volume). O tipo do arquivo é conferido pelo conteúdo, não pelo nome. Os textos e a lista de documentos ficam em `DOCS`, em `servidor/paginas.js`.
 - Anti-spam: honeypot (campo `site`) + limite de 10 pedidos por IP por hora. O login do painel tem o mesmo limite.
 
 ## Checklist de lançamento
