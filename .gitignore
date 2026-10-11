@@ -1,5 +1,7 @@
 node_modules
 .env
 dados/*.jsonl
+dados/*.json
+dados/*.tmp
 *.local
 .DS_Store

@@ -1,0 +1,119 @@
+/* Painel do consultor e página da cotação · mesma paleta do site */
+:root{
+  --marinho:#1a2754; --azul:#293c82; --limao:#c7d301; --laranja:#f2911d; --papel:#f0f4fa;
+  --texto:#1a2754; --texto-2:#55617f; --no-marinho:#c6d0ea; --borda:#d6deec; --erro:#b42318; --zap:#128c7e;
+  --f-tit:"Bricolage Grotesque","Inter",system-ui,sans-serif; --f-corpo:"Inter",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--papel);color:var(--texto);font:400 .9375rem/1.5 var(--f-corpo);-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+:focus-visible{outline:3px solid var(--laranja);outline-offset:2px}
+h1,h2,h3{font-family:var(--f-tit);letter-spacing:-.02em;margin:0}
+.bt{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:.5rem 1rem;border:1.5px solid var(--borda);border-radius:10px;background:#fff;color:var(--texto);font:600 .9rem/1.2 var(--f-corpo);text-decoration:none;cursor:pointer;text-align:center}
+.bt:hover{border-color:var(--marinho)}
+.bt-p{background:var(--laranja);border-color:var(--laranja);color:var(--marinho)}
+.bt-zap{background:var(--zap);border-color:var(--zap);color:#fff}
+.erro{color:var(--erro);font-size:.85rem;min-height:1.2rem;margin:.3rem 0 .6rem}
+.ajuda{color:var(--texto-2);font-size:.85rem;margin:.5rem 0 0}
+
+/* entrar */
+.entrar{min-height:100vh;display:grid;place-items:center;background:var(--marinho);padding:1rem}
+.entrar-cx{width:min(360px,100%);background:#fff;border-radius:16px;padding:1.75rem;display:grid}
+.entrar-cx h1{font-size:1.5rem;margin-bottom:1.25rem}
+.entrar-cx label{font-weight:600;margin-bottom:.35rem}
+.entrar-cx input{min-height:46px;padding:.6rem .8rem;border:1.5px solid var(--borda);border-radius:10px;font:inherit}
+.entrar-cx input[aria-invalid]{border-color:var(--erro)}
+
+/* barra */
+.barra{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem 1rem;padding:.7rem 1rem;background:var(--marinho);color:#fff}
+.barra strong{font:800 1.2rem/1 var(--f-tit)}
+.filtros{display:flex;flex-wrap:wrap;gap:.25rem;margin-right:auto}
+.filtros a{padding:.4rem .7rem;border-radius:8px;color:var(--no-marinho);text-decoration:none;font-weight:500;white-space:nowrap}
+.filtros a span{font-variant-numeric:tabular-nums;opacity:.75}
+.filtros a:hover{color:#fff}
+.filtros a[aria-current]{background:var(--limao);color:var(--marinho);font-weight:600}
+.barra input{min-height:40px;width:min(260px,100%);padding:.5rem .8rem;border:0;border-radius:10px;font:inherit}
+.sair{color:var(--no-marinho)}
+
+/* planilha */
+.area{display:grid;align-items:start}
+.planilha{min-width:0;padding:1rem}
+.planilha table{display:block;overflow-x:auto;max-height:calc(100vh - 150px);border-collapse:separate;border-spacing:0;background:#fff;border:1px solid var(--borda);border-radius:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.planilha th,.planilha td{text-align:left;padding:0;border-bottom:1px solid var(--borda);border-right:1px solid var(--borda)}
+.planilha th{position:sticky;top:0;z-index:2;background:#e4eaf5;padding:.55rem .7rem;font-weight:600;font-size:.85rem}
+.planilha td{padding:.5rem .7rem}
+.planilha td:has(.cp){padding:0}
+.planilha tr:last-child td{border-bottom:0}
+.planilha .fixa{position:sticky;left:0;z-index:1;background:#fff}
+.planilha th.fixa{z-index:3;background:#e4eaf5}
+.planilha td.fixa a{color:var(--azul);font-weight:600}
+.planilha tr.aberta td{background:#fbfce6}
+.cp{display:block;width:100%;padding:.5rem .7rem;border:0;background:none;font:inherit;color:inherit;text-align:left;cursor:copy}
+.cp:hover{background:var(--papel)}
+.cp.ok{background:var(--limao)}
+.st{font-weight:600}
+.st-nova{color:#b45309}.st-enviada{color:var(--azul)}.st-fechou{color:#15803d}.st-perdeu{color:var(--texto-2)}
+.dica,.vazio{color:var(--texto-2);margin:.75rem .25rem}
+.vazio{font-size:1.05rem;padding:2rem 0}
+.aviso-copia{position:fixed;left:50%;bottom:1.25rem;translate:-50% 0;max-width:calc(100% - 2rem);padding:.6rem 1rem;border-radius:10px;background:var(--marinho);color:#fff;opacity:0;pointer-events:none;transition:opacity .15s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aviso-copia.on{opacity:1}
+
+/* gaveta da cotação aberta */
+.gaveta{order:-1;background:#fff;border-bottom:1px solid var(--borda);padding:1.25rem 1rem}
+.gaveta h2{font-size:1.4rem}
+.gaveta h3{font-size:1.05rem;margin:1.25rem 0 .6rem}
+.gaveta .sub{color:var(--texto-2);margin:.3rem 0 .9rem}
+.fechar{float:right;color:var(--azul);font-weight:600}
+.ok-msg{margin:.9rem 0 0;padding:.5rem .75rem;border-radius:8px;background:#e7f6ec;color:#14532d;font-weight:600}
+.valores{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
+.valores label,.bloco{display:grid;gap:.3rem;font-weight:600;font-size:.9rem}
+.bloco{margin-top:.9rem}
+.rs{display:flex;align-items:center;border:1.5px solid var(--borda);border-radius:10px;background:#fff;overflow:hidden}
+.rs::before{content:"R$";padding:0 .1rem 0 .7rem;color:var(--texto-2);font-weight:500}
+.rs:focus-within{outline:3px solid var(--laranja);outline-offset:1px}
+.rs input{width:100%;min-height:42px;border:0;padding:.5rem .6rem;font:600 1rem var(--f-corpo);color:var(--texto);font-variant-numeric:tabular-nums}
+.rs input:focus-visible{outline:0}
+.bloco textarea,.bloco select{min-height:42px;padding:.5rem .7rem;border:1.5px solid var(--borda);border-radius:10px;background:#fff;font:400 .95rem/1.4 var(--f-corpo);color:var(--texto)}
+.gaveta form .bt{margin-top:1rem;width:100%}
+.envio{display:grid;gap:.5rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borda)}
+@media (min-width:1100px){
+  .area.com-gaveta{grid-template-columns:minmax(0,1fr) 400px}
+  .gaveta{order:0;position:sticky;top:61px;height:calc(100vh - 61px);overflow-y:auto;border-bottom:0;border-left:1px solid var(--borda)}
+}
+
+/* página da cotação (o que o cliente vê) */
+.cot{font-size:1rem;line-height:1.6}
+.cot-wrap{width:min(1080px,100% - 2rem);margin-inline:auto}
+main.cot-wrap{padding:2rem 0 3rem}
+.cot-topo{background:var(--marinho);color:#fff;padding:1.5rem 0 2.5rem}
+.cot .marca{margin:0 0 2rem;font:800 1.5rem/1 var(--f-tit)}
+.cot .marca span{font:500 .85rem/1 var(--f-corpo);color:var(--no-marinho);margin-left:.4rem}
+.cot h1{font-size:clamp(1.8rem,4.5vw,3rem);line-height:1.05;max-width:22ch;text-wrap:balance}
+.cot .lead{color:var(--texto-2);max-width:60ch;margin:.9rem 0 1.5rem}
+.cot-topo .lead{color:var(--no-marinho);margin-bottom:0}
+.pls{display:grid;background:#fff;border:1.5px solid var(--borda);border-radius:18px;overflow:hidden;margin-top:-1px}
+.pl{display:flex;flex-direction:column;padding:1.5rem 1.4rem;border-bottom:1.5px solid var(--borda)}
+.pl:last-child{border-bottom:0}
+.pl h2{font-size:1.25rem}
+.pl h2 span{display:inline-block;margin-left:.4rem;padding:.25rem .5rem;border-radius:6px;background:var(--limao);color:var(--marinho);font:600 .75rem/1 var(--f-corpo);letter-spacing:0;vertical-align:middle}
+.valor{margin:.7rem 0 1rem;font:800 3rem/1 var(--f-tit);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.valor small{font:500 .95rem/1 var(--f-corpo);letter-spacing:0;color:var(--texto-2)}
+.pl ul{flex:1;margin:0 0 1.25rem;padding:0;list-style:none;display:grid;gap:.4rem;align-content:start;color:var(--texto-2);font-size:.95rem}
+.pl li{padding-left:1.1rem;position:relative}
+.pl li::before{content:"";position:absolute;left:0;top:.6em;width:.4rem;height:.4rem;border-radius:1px;background:var(--azul)}
+.pl .bt{min-height:48px}
+.pl.destaque{background:var(--marinho);color:#fff}
+.pl.destaque .valor{color:var(--limao)}
+.pl.destaque ul,.pl.destaque .valor small{color:var(--no-marinho)}
+.pl.destaque li::before{background:var(--limao)}
+@media (min-width:860px){
+  .pls{grid-auto-flow:column;grid-auto-columns:1fr}
+  .pl{border-bottom:0;border-right:1.5px solid var(--borda)}
+  .pl:last-child{border-right:0}
+}
+.ativ{margin:1.5rem 0 0;font-size:1.05rem}
+.obs{margin:.75rem 0 0;padding:.9rem 1rem;border-left:4px solid var(--limao);background:#fff;white-space:pre-line}
+.proximo{margin:1.5rem 0 0;max-width:65ch}
+.legal{margin:2rem 0 0;max-width:80ch;color:var(--texto-2);font-size:.85rem}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}

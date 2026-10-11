@@ -1,4 +1,4 @@
-/* Proteção Veicular RN · animações + simulador. Sem dependências. */
+/* Proteção Veicular RN · pedido de cotação. Sem dependências. */
 (() => {
   const CFG = window.CFG || {};
   const $ = (s, r = document) => r.querySelector(s);
@@ -7,39 +7,7 @@
   const temZap = /^\d{10,13}$/.test(CFG.whatsapp || "");
   const linkZap = (texto) => `https://wa.me/${CFG.whatsapp}?text=${encodeURIComponent(texto)}`;
 
-  // --- título por palavras (efeito de assinatura) ---
-  const h1 = $(".palavras");
-  if (h1 && !reduz) {
-    h1.innerHTML = h1.textContent.trim().split(/\s+/)
-      .map((w, i) => `<span class="w" style="--i:${i}">${w}</span>`).join(" ");
-  }
-
-  // --- contador do preço ---
-  const cont = $("[data-contador]");
-  if (cont) {
-    const alvo = parseFloat(cont.dataset.contador.replace(",", "."));
-    const fmt = (v) => v.toFixed(2).replace(".", ",");
-    if (reduz) cont.textContent = fmt(alvo);
-    else {
-      const t0 = performance.now() + 500, dur = 1200;
-      const passo = (t) => {
-        const p = Math.min(1, Math.max(0, (t - t0) / dur));
-        cont.textContent = fmt(alvo * (1 - Math.pow(1 - p, 3)));
-        if (p < 1) requestAnimationFrame(passo);
-      };
-      requestAnimationFrame(passo);
-    }
-  }
-
-  // --- revelação na rolagem ---
-  const alvos = $$(".rv");
-  if (reduz || !("IntersectionObserver" in window)) alvos.forEach((e) => e.classList.add("in"));
-  else {
-    const io = new IntersectionObserver((ents) => ents.forEach((e) => {
-      if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
-    }), { rootMargin: "0px 0px -10% 0px", threshold: .1 });
-    alvos.forEach((e) => io.observe(e));
-  }
+  $("[data-ano]").textContent = new Date().getFullYear();
 
   // --- menu mobile (irmão do header, nunca filho) ---
   const btnMenu = $(".menu-btn"), menu = $("#menu-mobile");
@@ -52,63 +20,84 @@
   });
   $$("a", menu).forEach((a) => a.addEventListener("click", fecharMenu));
 
-  // --- links de WhatsApp: viram wa.me se o número existe; senão vão pro simulador ---
+  // --- links de WhatsApp: viram wa.me se o número existe; senão vão pro formulário ---
   $$("[data-zap]").forEach((a) => {
     if (temZap) { a.href = linkZap(a.dataset.zap); a.target = "_blank"; a.rel = "noopener"; }
   });
 
-  // --- seja consultor: só aparece se há como chamar ---
-  const secEquipe = $("#seja-consultor"), btnEquipe = $("[data-equipe]");
-  if (secEquipe && (CFG.equipeUrl || temZap)) {
-    secEquipe.hidden = false;
-    btnEquipe.href = CFG.equipeUrl || linkZap("Olá! Vi no site e quero saber como ser consultor 21Go no RN.");
-    btnEquipe.target = "_blank"; btnEquipe.rel = "noopener";
-  }
-
-  // --- plano pré-selecionado ---
-  const campoPlano = $("#plano");
-  $$("[data-plano]").forEach((a) => a.addEventListener("click", () => { campoPlano.value = a.dataset.plano; }));
-
-  // --- simulador em 2 etapas ---
-  const form = $("#form-lead");
+  const form = $("#cotacao");
   if (!form) return;
-  const etapas = $$(".etapa", form), rotulo = $("[data-etapa-atual]", form);
+
+  // --- plano pré-selecionado pelos botões da tabela de planos ---
+  $$("[data-plano]").forEach((a) => a.addEventListener("click", () => { form.plano.value = a.dataset.plano; }));
+
+  // --- a placa: única animação da página, o exemplo é "digitado" ao carregar ---
+  const placa = form.placa, caixaPlaca = $(".placa", form);
+  if (!reduz) {
+    const exemplo = placa.placeholder;
+    placa.placeholder = "";
+    [...exemplo].forEach((_, i) => setTimeout(() => { placa.placeholder = exemplo.slice(0, i + 1); }, 500 + i * 110));
+  }
+  placa.addEventListener("input", () => { placa.value = placa.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7); });
+  form.zeroKm.addEventListener("change", () => {
+    placa.disabled = form.zeroKm.checked;
+    caixaPlaca.classList.toggle("sem-placa", form.zeroKm.checked);
+    if (form.zeroKm.checked) { placa.value = ""; mostrarErros({}); }
+  });
+
+  // --- 3 etapas + sucesso ---
+  const ETAPAS = 3;
+  const etapas = $$(".etapa", form), rotulo = $("[data-etapa-atual]", form), barra = $(".progresso span", form);
   const irPara = (n) => {
     etapas.forEach((e) => { const ativa = e.dataset.etapa === String(n); e.classList.toggle("ativa", ativa); if (e.classList.contains("sucesso")) e.hidden = !ativa; });
-    form.classList.toggle("etapa-2", n >= 2);
-    if (rotulo) rotulo.textContent = Math.min(n, 2);
-    if (n === 3) $(".etapa-rotulo", form).hidden = true;
-    $(`.etapa[data-etapa="${n}"] input:not([type=hidden]):not([type=radio]):not([type=checkbox])`, form)?.focus({ preventScroll: true });
+    rotulo.textContent = Math.min(n, ETAPAS);
+    barra.style.width = `${(Math.min(n, ETAPAS) / ETAPAS) * 100}%`;
+    if (n > ETAPAS) { $(".etapa-rotulo", form).hidden = true; $(".progresso", form).hidden = true; }
+    form.scrollIntoView({ block: "nearest" }); // o cartão encolhe entre etapas; não deixa ele sair da tela
+    $(`.etapa[data-etapa="${n}"] :is(input:not([type=hidden],[type=radio],[type=checkbox],:disabled),select)`, form)?.focus({ preventScroll: true });
   };
-  const mostrarErros = (erros) => {
+  function mostrarErros(erros) {
     $$("[data-erro]", form).forEach((s) => (s.textContent = ""));
     $$("[aria-invalid]", form).forEach((i) => i.removeAttribute("aria-invalid"));
     for (const [campo, msg] of Object.entries(erros)) {
       const s = $(`[data-erro="${campo}"]`, form); if (s) s.textContent = msg;
       const i = form.elements[campo]; if (i && i.setAttribute) i.setAttribute("aria-invalid", "true");
     }
-  };
+  }
   const anoAtual = new Date().getFullYear();
-  const validarEtapa1 = () => {
-    const erros = {};
-    if (form.modelo.value.trim().length < 2) erros.modelo = "Diga o modelo do veículo.";
-    const ano = Number(form.ano.value);
-    if (!/^\d{4}$/.test(form.ano.value) || ano < 1980 || ano > anoAtual + 1) erros.ano = "Ano inválido.";
-    return erros;
+  const validar = {
+    1: () => (form.zeroKm.checked || /^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(placa.value) ? {} : { placa: "Placa no formato ABC1D23 ou ABC1234." }),
+    2: () => {
+      const erros = {};
+      if (form.marca.value.trim().length < 2) erros.marca = "Diga a marca do veículo.";
+      if (form.modelo.value.trim().length < 2) erros.modelo = "Diga o modelo do veículo.";
+      const ano = Number(form.ano.value);
+      if (!/^\d{4}$/.test(form.ano.value) || ano < 1980 || ano > anoAtual + 1) erros.ano = "Ano inválido.";
+      return erros;
+    },
+    3: () => {
+      const erros = {};
+      if (!/\S+\s+\S+/.test(form.nome.value.trim())) erros.nome = "Digite seu nome e sobrenome.";
+      const dig = form.whatsapp.value.replace(/\D/g, "");
+      if (dig.length < 10 || dig.length > 13) erros.whatsapp = "WhatsApp com DDD, só números.";
+      const email = form.email.value.trim();
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) erros.email = "E-mail inválido. Pode deixar em branco.";
+      return erros;
+    },
   };
-  const validarEtapa2 = () => {
-    const erros = {};
-    if (!/\S+\s+\S+/.test(form.nome.value.trim())) erros.nome = "Digite seu nome e sobrenome.";
-    const dig = form.whatsapp.value.replace(/\D/g, "");
-    if (dig.length < 10 || dig.length > 13) erros.whatsapp = "WhatsApp com DDD, só números.";
-    return erros;
-  };
+  const etapaDe = (el) => Number(el.closest(".etapa").dataset.etapa);
 
-  $("[data-proximo]", form).addEventListener("click", () => {
-    const erros = validarEtapa1(); mostrarErros(erros);
-    if (!Object.keys(erros).length) irPara(2);
+  $$("[data-proximo]", form).forEach((b) => b.addEventListener("click", () => {
+    const n = etapaDe(b), erros = validar[n](); mostrarErros(erros);
+    if (!Object.keys(erros).length) irPara(n + 1);
+  }));
+  $$("[data-voltar]", form).forEach((b) => b.addEventListener("click", () => irPara(etapaDe(b) - 1)));
+  // Enter num campo avança a etapa em vez de enviar o formulário pela metade
+  form.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter" || ev.target.tagName !== "INPUT") return;
+    const proximo = $("[data-proximo]", ev.target.closest(".etapa"));
+    if (proximo) { ev.preventDefault(); proximo.click(); }
   });
-  $("[data-voltar]", form).addEventListener("click", () => irPara(1));
 
   // máscara leve do telefone
   form.whatsapp.addEventListener("input", () => {
@@ -119,32 +108,31 @@
 
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const erros = validarEtapa2(); mostrarErros(erros);
+    const erros = validar[3](); mostrarErros(erros);
     if (Object.keys(erros).length) return;
     const btn = $('button[type="submit"]', form); btn.setAttribute("aria-busy", "true");
-    const fd = new FormData(form), dados = Object.fromEntries(fd.entries());
+    const dados = Object.fromEntries(new FormData(form).entries());
     try {
       const r = await fetch("/api/leads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(dados) });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) { mostrarErros(j.erros || { geral: j.erro || "Não deu pra enviar. Tente de novo." }); return; }
+      if (!r.ok) {
+        const doServidor = j.erros || { geral: j.erro || "O pedido não foi enviado. Tente de novo." };
+        // erro num campo de etapa anterior: volta pra onde ele está
+        const campo = form.elements[Object.keys(doServidor)[0]];
+        if (campo?.closest) irPara(etapaDe(campo));
+        mostrarErros(doServidor);
+        return;
+      }
     } catch {
-      mostrarErros({ geral: "Sem conexão. Tente de novo em instantes." }); return;
+      mostrarErros({ geral: "Sem conexão. Confira a internet e tente de novo." }); return;
     } finally { btn.removeAttribute("aria-busy"); }
 
     const extras = [dados.app && "uso em app", dados.leilao && "leilão", dados.temSeguro && "tenho seguro"].filter(Boolean).join(", ");
-    const msg = `Olá! Fiz a simulação no site.\nNome: ${dados.nome}\nVeículo: ${dados.tipo} ${dados.modelo} ${dados.ano}\nCidade: ${dados.cidade}` +
+    const msg = `Olá! Pedi uma cotação no site.\nNome: ${dados.nome}\nVeículo: ${dados.marca} ${dados.modelo} ${dados.ano}\nPlaca: ${dados.zeroKm ? "0 km" : dados.placa}\nCidade: ${dados.cidade}` +
       (extras ? `\nPerfil: ${extras}` : "") + (dados.plano ? `\nPlano de interesse: ${dados.plano}` : "");
-    const abrir = $("[data-abrir-zap]", form), txt = $("[data-sucesso-txt]", form);
-    if (temZap) {
-      abrir.href = linkZap(msg); abrir.target = "_blank"; abrir.rel = "noopener";
-      irPara(3);
-      setTimeout(() => window.open(abrir.href, "_blank", "noopener"), 400);
-    } else {
-      txt.textContent = "Recebi sua simulação. Vou te chamar no WhatsApp informado com os valores para o seu veículo.";
-      abrir.hidden = true;
-      irPara(3);
-    }
+    const abrir = $("[data-abrir-zap]", form);
+    if (temZap) { abrir.href = linkZap(msg); abrir.target = "_blank"; abrir.rel = "noopener"; }
+    else abrir.hidden = true;
+    irPara(ETAPAS + 1);
   });
-
-  $("[data-ano]").textContent = new Date().getFullYear();
 })();
