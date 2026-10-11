@@ -65,20 +65,21 @@ const campoSenha = (id, rotulo, auto, extra = "") => `<label for="${id}">${rotul
 
 export function paginaEntrar(erro = "") {
   return `${cabeca("Painel do consultor")}<body class="entrar">
+<div class="entrar-col">
+<img src="/img/logo-21go.png" alt="21Go Proteção Veicular" width="164" height="72">
 <form method="post" action="/painel/entrar" class="entrar-cx">
-  <p class="logo">21Go <span>painel do consultor</span></p>
-  <h1>Entre para ver as cotações</h1>
+  <h1>Painel do consultor</h1>
   ${campoSenha("senha", "Senha", "current-password", `autofocus${erro ? ' aria-invalid="true" aria-describedby="erro"' : ""}`)}
   <p class="erro" id="erro" role="alert">${esc(erro)}</p>
   <button class="bt bt-p">Entrar</button>
-</form>${VER_SENHA}</body></html>`;
+</form></div>${VER_SENHA}</body></html>`;
 }
 
 // Moldura comum do painel: marca, navegação e saída sempre no mesmo lugar.
 const moldura = (titulo, ativo, corpo) => `${cabeca(titulo)}<body>
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 <header class="topo">
-  <a class="logo" href="/painel">21Go <span>painel do consultor</span></a>
+  <a class="logo" href="/painel"><img src="/img/logo-21go.png" alt="21Go Proteção Veicular" width="82" height="36"><span>painel do consultor</span></a>
   <nav aria-label="Seções do painel">
     <a href="/painel"${ativo === "cotacoes" ? ' aria-current="page"' : ""}>Cotações</a>
     <a href="/painel/perfil"${ativo === "perfil" ? ' aria-current="page"' : ""}>Perfil</a>
@@ -289,7 +290,7 @@ export function paginaCotacao(c, cfg) {
 
   return `${cabeca(`Cotação 21Go: ${veiculo}`)}<body class="cot">
 <header class="cot-topo"><div class="cot-wrap">
-  <p class="marca">21Go <span>com ${esc(cfg.consultor)}, consultor em Natal</span></p>
+  <p class="marca"><img src="/img/logo-21go.png" alt="21Go Proteção Veicular" width="118" height="52"><span>com ${esc(cfg.consultor)}, consultor em Natal</span></p>
   <h1>${esc(primeiro)}, esta é a cotação do seu ${esc(veiculo)}</h1>
   <p class="lead">${esc(c.zeroKm ? "Veículo 0 km" : `Placa ${c.placa}`)} · ${esc(c.cidade)}${c.app ? " · uso em aplicativo" : ""}${c.leilao ? " · veículo de leilão" : ""}</p>
 </div></header>

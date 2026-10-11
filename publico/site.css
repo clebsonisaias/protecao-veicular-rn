@@ -38,7 +38,7 @@ a{color:inherit}
 /* topo */
 .topo{position:sticky;top:0;z-index:40;background:var(--marinho);color:#fff}
 .topo-in{display:flex;align-items:center;gap:1.5rem;height:68px}
-.marca{display:flex;align-items:baseline;gap:.6rem;text-decoration:none;font:800 1.5rem/1 var(--f-tit);letter-spacing:-.02em}
+.marca{display:flex;align-items:center;gap:.75rem;text-decoration:none;font:800 1.5rem/1 var(--f-tit);letter-spacing:-.02em}
 .marca span{font:500 .85rem/1 var(--f-corpo);letter-spacing:0;color:var(--no-marinho)}
 .nav-desk{display:none;gap:1.6rem;margin-left:auto}
 .nav-desk a{text-decoration:none;color:var(--no-marinho);font-weight:500;padding:.5rem 0}

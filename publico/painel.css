@@ -21,7 +21,8 @@ h1,h2,h3{font-family:var(--f-tit);letter-spacing:-.02em;margin:0}
 .pular:focus{left:0}
 .bt{transition:border-color .15s,background .15s;touch-action:manipulation}
 .bt-perigo{color:var(--erro);border-color:#f1c4bf}.bt-perigo:hover{border-color:var(--erro)}
-.logo{font:800 1.35rem/1 var(--f-tit);color:inherit;text-decoration:none;display:flex;align-items:baseline;gap:.5rem;margin:0}
+.logo{font:800 1.35rem/1 var(--f-tit);color:inherit;text-decoration:none;display:flex;align-items:center;gap:.65rem;margin:0}
+img{max-width:100%;height:auto;display:block}
 .logo span{font:500 .82rem/1 var(--f-corpo);opacity:.75}
 label{font-weight:600;font-size:.9rem}
 input,select,textarea{font:inherit;color:var(--texto)}
@@ -34,8 +35,8 @@ input,select,textarea{font:inherit;color:var(--texto)}
 
 /* entrar */
 .entrar{min-height:100dvh;display:grid;place-items:center;background:var(--marinho);padding:1rem}
-.entrar-cx{width:min(380px,100%);background:#fff;border-radius:16px;padding:1.75rem;display:grid;gap:.35rem}
-.entrar-cx .logo{color:var(--marinho);margin-bottom:1.25rem}
+.entrar-col{width:min(380px,100%);display:grid;gap:1.5rem;justify-items:center}
+.entrar-cx{width:100%;background:#fff;border-radius:16px;padding:1.75rem;display:grid;gap:.35rem}
 .entrar-cx h1{font-size:1.35rem;margin-bottom:1rem}
 .entrar-cx .bt{min-height:48px;margin-top:.25rem}
 
@@ -152,8 +153,8 @@ input,select,textarea{font:inherit;color:var(--texto)}
 .cot-wrap{width:min(1080px,100% - 2rem);margin-inline:auto}
 main.cot-wrap{padding:2rem 0 3rem}
 .cot-topo{background:var(--marinho);color:#fff;padding:1.5rem 0 2.5rem}
-.cot .marca{margin:0 0 2rem;font:800 1.5rem/1 var(--f-tit)}
-.cot .marca span{font:500 .85rem/1 var(--f-corpo);color:var(--no-marinho);margin-left:.4rem}
+.cot .marca{margin:0 0 2rem;display:flex;align-items:center;flex-wrap:wrap;gap:.5rem .9rem}
+.cot .marca span{font:500 .9rem/1.3 var(--f-corpo);color:var(--no-marinho)}
 .cot h1{font-size:clamp(1.8rem,4.5vw,3rem);line-height:1.05;max-width:22ch;text-wrap:balance}
 .cot .lead{color:var(--texto-2);max-width:60ch;margin:.9rem 0 1.5rem}
 .cot-topo .lead{color:var(--no-marinho);margin-bottom:0}
