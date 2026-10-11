@@ -91,7 +91,7 @@ ${corpo}</body></html>`;
 const noCrm = (c) => (c.crm?.ok ? "Enviada" : c.crm ? "Falhou" : "");
 const pilula = (c) => `<span class="pill st-${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>`;
 
-export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl }) {
+export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl, temLeitor, erroLeitura }) {
   const conta = (s) => cotacoes.filter((c) => c.status === s).length;
   const visiveis = filtro ? cotacoes.filter((c) => c.status === filtro) : cotacoes;
   const q = (id) => `/painel?${new URLSearchParams({ ...(filtro && { status: filtro }), ...(id && { id }) })}`;
@@ -124,7 +124,7 @@ export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl }) {
     : `<div class="vazio"><p>${filtro ? "Nenhuma cotação com esse status." : "Nenhum pedido ainda. Quando alguém pedir cotação no site, ele aparece aqui."}</p>
       ${filtro ? '<a class="bt" href="/painel">Ver todas</a>' : '<a class="bt" href="/" target="_blank" rel="noopener">Abrir o site</a>'}</div>`}
   </main>
-  ${aberta ? gaveta(aberta, q(""), salvo, crmUrl) : ""}
+  ${aberta ? gaveta(aberta, q(""), salvo, crmUrl, { temLeitor, erroLeitura }) : ""}
 </div>
 <output class="aviso-copia" id="copiado" aria-live="polite"></output>
 <script>
@@ -148,6 +148,10 @@ export function paginaPainel({ cotacoes, filtro, aberta, salvo, crmUrl }) {
     const vazio = document.getElementById("sem-busca");
     if (vazio) vazio.hidden = achou > 0;
   });
+  // a leitura leva de 10 a 60 segundos: avisa e trava o botão
+  document.querySelectorAll("form[data-lendo]").forEach((f) => f.addEventListener("submit", () => {
+    const b = f.querySelector("button"); b.disabled = true; b.textContent = "Lendo os documentos, pode levar até um minuto...";
+  }));
   // valores alterados e não salvos: avisa antes de sair da cotação aberta
   const form = document.querySelector(".gaveta form[data-valores]");
   if (form) {
@@ -213,7 +217,30 @@ function blocoDocs(c) {
     <form method="post" action="/painel/${esc(c.id)}/docs/apagar" onsubmit="return confirm('Apagar os documentos deste cliente? Não dá para desfazer.')"><button class="bt bt-perigo">Apagar documentos</button></form></div>`;
 }
 
-function gaveta(c, voltar, salvo, crmUrl) {
+// Rótulos iguais aos das telas do PowerCRM, na ordem em que aparecem lá.
+const LEITURA = [
+  ["Condutor", "condutor", { nome: "Nome completo", cpf: "CPF", rg: "RG", orgaoExpedidor: "Órgão expedidor", cnh: "CNH", categoria: "Categoria", primeiraHabilitacao: "1ª habilitação", validadeCnh: "Validade da CNH", nascimento: "Nascimento" }],
+  ["Veículo", "veiculo", { placa: "Placa", chassi: "Chassi", renavam: "Renavam", marcaModelo: "Marca e modelo", anoFabricacao: "Ano de fabricação", anoModelo: "Ano do modelo", cor: "Cor", combustivel: "Combustível", proprietario: "Proprietário", cpfCnpjProprietario: "CPF/CNPJ do proprietário" }],
+  ["Endereço", "endereco", { cep: "CEP", logradouro: "Endereço", numero: "Número", complemento: "Complemento", bairro: "Bairro", cidade: "Cidade", uf: "Estado", titular: "Titular do comprovante" }],
+];
+
+function blocoLeitura(c, { temLeitor, erroLeitura }) {
+  if (!c.docs) return "";
+  const l = c.leitura;
+  const botao = temLeitor
+    ? `<form method="post" action="/painel/${esc(c.id)}/docs/ler" data-lendo><button class="bt${l ? "" : " bt-p"}">${l ? "Ler de novo" : "Ler documentos com IA"}</button></form>`
+    : '<p class="ajuda">A leitura automática está desligada: falta configurar a chave da IA (ANTHROPIC_API_KEY) no servidor.</p>';
+  return `<div class="leitura" id="leitura">
+    ${erroLeitura ? `<p class="erro-msg" role="alert">${esc(erroLeitura)}</p>` : ""}
+    ${l ? `<p class="ajuda">Lido em ${esc(quando(l.em))}. ${l.desatualizada ? "<strong>Chegou documento novo depois disso: leia de novo.</strong>" : "Confira com o documento antes de salvar no CRM."}</p>
+    ${l.avisos?.length ? `<ul class="avisos">${l.avisos.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>` : ""}
+    ${LEITURA.map(([titulo, grupo, campos]) => `<h4>${titulo}</h4><dl class="lidos">${Object.entries(campos).map(([k, rotulo]) => { const v = esc(l[grupo]?.[k] || "");
+      return `<div><dt>${rotulo}</dt><dd>${v ? `<button type="button" class="cp" title="Copiar">${v}</button>` : '<span class="nao-lido">não lido</span>'}</dd></div>`; }).join("")}</dl>`).join("")}` : ""}
+    ${botao}
+  </div>`;
+}
+
+function gaveta(c, voltar, salvo, crmUrl, leitura) {
   const v = c.valores || {};
   const veiculo = [c.marca, c.modelo, c.ano].filter(Boolean).join(" ");
   const tudo = COLUNAS.map(([n, f]) => `${n}: ${f(c) ?? ""}`).join("\n");
@@ -263,7 +290,7 @@ function gaveta(c, voltar, salvo, crmUrl) {
 
   <section>
     <h3><span class="passo">4</span> Receba os documentos</h3>
-    ${blocoDocs(c) || '<p class="ajuda">O cliente envia CNH, documento do veículo e comprovante de residência pela página da cotação. Eles aparecem aqui.</p>'}
+    ${blocoDocs(c) ? blocoDocs(c) + blocoLeitura(c, leitura) : '<p class="ajuda">O cliente envia CNH, documento do veículo e comprovante de residência pela página da cotação. Eles aparecem aqui.</p>'}
   </section>
 </aside>`;
 }
@@ -312,10 +339,28 @@ export function paginaCotacao(c, cfg) {
     </li>`).join("")}</ul>
   </section>
   <script>
+  // Foto de celular chega com 4 a 8 MB: reduz para até 2400 px em JPEG. Se o navegador
+  // não conseguir abrir a imagem, segue com o arquivo original.
+  async function reduzir(arquivo) {
+    if (!arquivo.type.startsWith("image/")) return arquivo;
+    try {
+      const img = await createImageBitmap(arquivo);
+      const escala = Math.min(1, 2400 / Math.max(img.width, img.height));
+      if (escala === 1 && arquivo.type === "image/jpeg" && arquivo.size < 3 * 1024 * 1024) return arquivo;
+      const tela = document.createElement("canvas");
+      tela.width = Math.round(img.width * escala); tela.height = Math.round(img.height * escala);
+      tela.getContext("2d").drawImage(img, 0, 0, tela.width, tela.height);
+      const blob = await new Promise((ok) => tela.toBlob(ok, "image/jpeg", 0.88));
+      return blob || arquivo;
+    } catch { return arquivo; }
+  }
   document.querySelectorAll("[data-doc]").forEach((campo) => campo.addEventListener("change", async () => {
-    const arquivo = campo.files[0], st = document.getElementById("st-" + campo.dataset.doc);
+    let arquivo = campo.files[0];
+    const st = document.getElementById("st-" + campo.dataset.doc);
     if (!arquivo) return;
     st.className = "";
+    if (arquivo.type.startsWith("image/")) st.textContent = "Preparando a foto...";
+    arquivo = await reduzir(arquivo);
     if (arquivo.size > 10 * 1024 * 1024) { st.className = "falha"; st.textContent = "Arquivo acima de 10 MB. Tire a foto em qualidade menor ou envie o PDF."; return; }
     st.textContent = "Enviando...";
     try {

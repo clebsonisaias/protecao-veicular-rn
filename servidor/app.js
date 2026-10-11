@@ -10,6 +10,7 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { LeituraFalhou, criarLeitor } from "./leitura.js";
 import { DOCS, PLANOS, STATUS, brl, csvCotacoes, paginaCotacao, paginaEntrar, paginaPainel, paginaPerfil } from "./paginas.js";
 
 export const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -198,7 +199,9 @@ const lerCookie = (req, nome) =>
   (req.headers.cookie || "").split(/;\s*/).find((c) => c.startsWith(nome + "="))?.slice(nome.length + 1) || "";
 const paraWa = (tel) => (tel.length <= 11 ? "55" + tel : tel);
 
-export function criarApp({ env = process.env, log = console, buscar = fetch } = {}) {
+export function criarApp({ env = process.env, log = console, buscar = fetch, lerDocs } = {}) {
+  // Leitura automática dos documentos: só existe com a chave da IA configurada.
+  const leitor = lerDocs || (env.ANTHROPIC_API_KEY ? criarLeitor(env.ANTHROPIC_API_KEY) : null);
   const dirDados = env.DADOS_DIR || join(RAIZ, "dados");
   mkdirSync(dirDados, { recursive: true });
   const banco = abrirCotacoes(dirDados);
@@ -319,6 +322,7 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
     apagarDoc(c.id, tipo); // reenvio substitui o anterior
     writeFileSync(join(dirDocs, c.id, `${tipo}.${arquivo.ext}`), req.body);
     c.docs = { ...c.docs, [tipo]: { ext: arquivo.ext, mime: arquivo.mime, em: new Date().toISOString() } };
+    if (c.leitura) c.leitura.desatualizada = true; // chegou arquivo novo depois da leitura
     if (PLANOS.some((p) => p.chave === req.query.plano)) c.planoEscolhido = req.query.plano;
     if (c.status === "nova" || c.status === "enviada") c.status = "documentos";
     banco.salvar();
@@ -383,7 +387,7 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
     const filtro = Object.hasOwn(STATUS, req.query.status) ? req.query.status : "";
     res.type("html").send(paginaPainel({
       cotacoes: [...banco.lista].reverse(), filtro, aberta: achar(String(req.query.id || "")), salvo: req.query.salvo === "1",
-      crmUrl: crm?.formUrl || "",
+      crmUrl: crm?.formUrl || "", temLeitor: Boolean(leitor), erroLeitura: String(req.query.leitura || "").slice(0, 300),
     }));
   });
   painel.get("/planilha.csv", (_req, res) => {
@@ -398,11 +402,26 @@ export function criarApp({ env = process.env, log = console, buscar = fetch } = 
     res.setHeader("Content-Disposition", `inline; filename="${req.params.tipo}-${c.id}.${doc.ext}"`);
     res.type(doc.mime).sendFile(join(dirDocs, c.id, `${req.params.tipo}.${doc.ext}`));
   });
+  painel.post("/:id/docs/ler", async (req, res) => {
+    const c = achar(req.params.id);
+    if (!c?.docs || !leitor) return res.status(404).end();
+    const arquivos = Object.entries(c.docs).map(([tipo, d]) => ({ tipo, mime: d.mime, dados: readFileSync(join(dirDocs, c.id, `${tipo}.${d.ext}`)) }));
+    try {
+      c.leitura = { em: new Date().toISOString(), ...(await leitor(arquivos)) };
+      banco.salvar();
+      res.redirect(`/painel?id=${c.id}#leitura`);
+    } catch (e) {
+      if (!(e instanceof LeituraFalhou)) log.warn(`[leitura] ${c.id}: ${e.message}`);
+      const motivo = e instanceof LeituraFalhou ? e.message : "A leitura falhou por um erro inesperado. Tente de novo.";
+      res.redirect(`/painel?${new URLSearchParams({ id: c.id, leitura: motivo })}#leitura`);
+    }
+  });
   painel.post("/:id/docs/apagar", (req, res) => {
     const c = achar(req.params.id);
     if (!c) return res.status(404).end();
     rmSync(join(dirDocs, c.id), { recursive: true, force: true });
     delete c.docs;
+    delete c.leitura; // os dados lidos são tão pessoais quanto os arquivos
     banco.salvar();
     res.redirect(`/painel?id=${c.id}`);
   });

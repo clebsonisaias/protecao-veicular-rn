@@ -127,6 +127,19 @@ input,select,textarea{font:inherit;color:var(--texto)}
 .crm{margin:0 0 .75rem;padding:.6rem .75rem;border-radius:8px;background:var(--papel);font-size:.9rem;font-weight:500}
 .crm p{margin:0 0 .6rem}.crm form{display:inline}.crm .bt{margin:0 .4rem .2rem 0}
 .crm a:not(.bt){color:var(--azul)}
+.leitura{margin-top:1rem;padding-top:1rem;border-top:1px dashed var(--borda)}
+.leitura h4{margin:1rem 0 .4rem;font:700 .95rem var(--f-tit)}
+.lidos{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:0 .75rem}
+.lidos div{min-width:0;border-bottom:1px solid #e9eef7}
+.lidos dt{color:var(--texto-2);font-size:.78rem;padding:.35rem 0 0}
+.lidos dd{margin:0;font-weight:600}
+.lidos .cp{height:auto;min-height:36px;padding:.3rem .4rem;margin-left:-.4rem;border-radius:6px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.nao-lido{display:block;padding:.45rem 0;color:var(--texto-2);font-weight:400;font-size:.88rem}
+.avisos{margin:.6rem 0 0;padding:.6rem .8rem .6rem 1.8rem;border-radius:8px;background:#fef3c7;color:#78350f;font-size:.9rem;display:grid;gap:.3rem}
+.erro-msg{margin:0 0 .75rem;padding:.6rem .8rem;border-radius:8px;background:#fde8e6;color:#8a1c12;font-weight:600}
+.leitura form{margin-top:1rem}
+.leitura .bt{min-height:46px;width:100%}
+.leitura .bt:disabled{opacity:.7;cursor:progress}
 .docs-painel p{margin:0 0 .5rem}
 .docs-painel ul{margin:0 0 .75rem;padding:0;list-style:none;display:grid;gap:.4rem}
 .docs-painel a{color:var(--azul);font-weight:600}.docs-painel li span{color:var(--texto-2);font-size:.85rem;margin-left:.3rem}

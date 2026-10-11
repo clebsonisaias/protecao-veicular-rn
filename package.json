@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "description": "Site de vendas de proteção veicular 21Go em Natal e RN (consultor independente).",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "node --env-file-if-exists=.env servidor/servidor.js",
     "start": "node servidor/servidor.js",
     "teste": "node --test teste/*.test.js"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "@anthropic-ai/sdk": "^0.133.0",
+    "express": "^4.21.2",
+    "zod": "^4.6.5"
   }
 }

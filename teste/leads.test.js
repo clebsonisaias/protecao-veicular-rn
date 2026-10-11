@@ -267,3 +267,70 @@ test("perfil: troca de senha derruba a antiga e o cookie antigo; nome e WhatsApp
   assert.equal((await entrar(base2, "senha-da-env")).status, 401);
   assert.match(await (await fetch(`${base2}/config.js`)).text(), /Clebson Silva/);
 });
+
+test("leitura automática: grava os campos lidos, mostra erro legível e some junto com os documentos", async () => {
+  let falhar = false;
+  const recebidos = [];
+  const { LeituraFalhou } = await import("../servidor/leitura.js");
+  const lerDocs = async (docs) => {
+    recebidos.push(docs.map((d) => `${d.tipo}:${d.mime}:${d.dados.length}`));
+    if (falhar) throw new LeituraFalhou("A IA está no limite de uso agora.");
+    return { condutor: { nome: "ANA SOUZA", cpf: "123.456.789-09" }, veiculo: { chassi: "9BWZZZ377VT004251" }, endereco: {}, avisos: ["<b>CNH vencida</b>"] };
+  };
+  const { app, arquivo } = criarApp({ env: { DADOS_DIR: pasta(), PAINEL_SENHA: "s3nha" }, log: mudo, lerDocs });
+  const srv = app.listen(0);
+  after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  await fetch(`${base}/api/leads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(OK) });
+  const salva = () => JSON.parse(readFileSync(arquivo, "utf8"))[0];
+  const { id } = salva();
+  const entrou = await fetch(`${base}/painel/entrar`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "senha=s3nha" });
+  const cookie = entrou.headers.get("set-cookie").split(";")[0];
+  const post = (caminho, corpo = "", c = cookie) => fetch(base + caminho, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded", cookie: c }, body: corpo });
+  const painel = async (q = "") => (await fetch(`${base}/painel?id=${id}${q}`, { headers: { cookie } })).text();
+  await post(`/painel/${id}`, "vip=227,41");
+
+  assert.equal((await post(`/painel/${id}/docs/ler`)).status, 404, "sem documento não há o que ler");
+  const jpg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40, 7)]);
+  await fetch(`${base}/c/${id}/doc/cnh`, { method: "PUT", body: jpg });
+  assert.match(await painel(), /Ler documentos com IA/);
+  assert.equal((await post(`/painel/${id}/docs/ler`, "", "")).status, 302, "sem login não lê");
+  assert.equal(recebidos.length, 0);
+
+  assert.equal((await post(`/painel/${id}/docs/ler`)).status, 302);
+  assert.deepEqual(recebidos[0], ["cnh:image/jpeg:44"]);
+  assert.equal(salva().leitura.condutor.cpf, "123.456.789-09");
+  const html = await painel();
+  assert.match(html, /123\.456\.789-09/);
+  assert.match(html, /9BWZZZ377VT004251/);
+  assert.match(html, /não lido/);
+  assert.doesNotMatch(html, /<b>CNH vencida<\/b>/, "aviso da IA é escapado");
+
+  await fetch(`${base}/c/${id}/doc/veiculo`, { method: "PUT", body: jpg });
+  assert.match(await painel(), /Chegou documento novo/);
+
+  falhar = true;
+  const falhou = await post(`/painel/${id}/docs/ler`);
+  assert.equal(new URL(falhou.headers.get("location"), base).searchParams.get("leitura"), "A IA está no limite de uso agora.");
+  assert.match(await painel("&leitura=" + encodeURIComponent("A IA está no limite de uso agora.")), /role="alert">A IA está no limite/);
+  assert.equal(salva().leitura.condutor.cpf, "123.456.789-09", "falha não apaga a leitura anterior");
+
+  await post(`/painel/${id}/docs/apagar`);
+  assert.equal(salva().leitura, undefined);
+});
+
+test("sem a chave da IA o painel explica que a leitura está desligada", async () => {
+  const { app, arquivo } = criarApp({ env: { DADOS_DIR: pasta(), PAINEL_SENHA: "s3nha" }, log: mudo });
+  const srv = app.listen(0);
+  after(() => srv.close());
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  await fetch(`${base}/api/leads`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(OK) });
+  const { id } = JSON.parse(readFileSync(arquivo, "utf8"))[0];
+  const entrou = await fetch(`${base}/painel/entrar`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "senha=s3nha" });
+  const cookie = entrou.headers.get("set-cookie").split(";")[0];
+  const post = (caminho, corpo = "") => fetch(base + caminho, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded", cookie }, body: corpo });
+  await post(`/painel/${id}`, "vip=227,41");
+  await fetch(`${base}/c/${id}/doc/cnh`, { method: "PUT", body: Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(40, 7)]) });
+  assert.match(await (await fetch(`${base}/painel?id=${id}`, { headers: { cookie } })).text(), /leitura automática está desligada/);
+  assert.equal((await post(`/painel/${id}/docs/ler`)).status, 404);
+});
