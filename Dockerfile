@@ -1,7 +1,7 @@
 # Sem etapa de build, de proposito: HTML/CSS/JS direto, Express so serve.
 # O Coolify injeta toda env var como build ARG (inclusive NODE_ENV); aqui e
 # inofensivo porque nao ha devDependency nem compilacao.
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 
